@@ -4,9 +4,9 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 
-// Body parser limits badha di hain
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// SAB SE BARA FIX: Express ab kisi data ko corrupt nahi karega. 
+// Har cheez RAW Buffer (binary) me receive hogi.
+app.use(express.raw({ type: '*/*', limit: '50mb' }));
 
 const TARGET_URL = 'https://version.astutech.online'; 
 const SUPABASE_URL = 'https://nebwfonyhfgxnfkiisvs.supabase.co';
@@ -42,8 +42,8 @@ app.get('/romeo/ds', (req, res) => {
                     <p class="text-xs text-gray-500 mt-1">Target: <span class="text-green-400">${TARGET_URL}/</span></p>
                 </div>
                 <div class="flex items-center gap-2 px-3 py-1 bg-green-900/20 border border-green-500/30 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.2)]">
-                    <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span id="connection-status" class="text-xs text-green-400 font-semibold tracking-wide">CONNECTING...</span>
+                    <div id="status-dot" class="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+                    <span id="connection-status" class="text-xs text-yellow-400 font-semibold tracking-wide">CONNECTING...</span>
                 </div>
             </header>
 
@@ -81,7 +81,7 @@ app.get('/romeo/ds', (req, res) => {
                 const methodColor = log.method === 'GET' ? 'text-blue-400' : log.method === 'POST' ? 'text-green-400' : 'text-yellow-400';
                 const statusColor = log.status < 400 ? 'text-green-500' : 'text-red-500';
                 
-                // Preparing Copy Payload
+                // Safe JSON encode for button
                 const rawData = JSON.stringify(log, null, 2);
                 const encodedData = rawData.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\\n/g, '\\\\n');
 
@@ -116,25 +116,41 @@ app.get('/romeo/ds', (req, res) => {
                 container.prepend(logEl);
             }
 
-            // Purana data fetch karega
             async function fetchExistingLogs() {
-                const { data, error } = await supabase
-                    .from('logs')
-                    .select('*')
-                    .order('created_at', { ascending: false })
-                    .limit(50);
-                
-                if (data && data.length > 0) {
-                    // Reverse karke dikhayenge takay top par latest aaye
-                    [...data].reverse().forEach(log => renderLog(log));
-                } else if (!data || data.length === 0) {
-                    document.getElementById('waiting-text').innerText = "Waiting for new game requests...";
+                try {
+                    const { data, error } = await supabase
+                        .from('logs')
+                        .select('*')
+                        .order('created_at', { ascending: false })
+                        .limit(50);
+                    
+                    if (error) throw error;
+
+                    if (data && data.length > 0) {
+                        [...data].reverse().forEach(log => renderLog(log));
+                    } else if (!data || data.length === 0) {
+                        document.getElementById('waiting-text').innerText = "Waiting for new game requests...";
+                    }
+                    
+                    document.getElementById('connection-status').innerText = "REALTIME SYNC ON";
+                    document.getElementById('connection-status').classList.replace('text-yellow-400', 'text-green-400');
+                    document.getElementById('status-dot').classList.replace('bg-yellow-500', 'bg-green-500');
+
+                } catch (err) {
+                    console.error(err);
+                    document.getElementById('connection-status').innerText = "DB ERROR";
+                    document.getElementById('connection-status').classList.replace('text-yellow-400', 'text-red-500');
+                    document.getElementById('status-dot').classList.replace('bg-yellow-500', 'bg-red-500');
+                    
+                    document.getElementById('waiting-text').innerHTML = \`
+                        <span class="text-red-500 font-bold">Supabase Connection Failed!</span><br><br>
+                        \${err.message}<br><br>
+                        Check if table 'logs' is created and RLS is disabled in Supabase.
+                    \`;
                 }
-                
-                document.getElementById('connection-status').innerText = "REALTIME SYNC ON";
             }
 
-            // Realtime WebSocket Subscription (Page reload nahi karna parega)
+            // Realtime WebSocket Subscription
             supabase.channel('public:logs')
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs' }, payload => {
                     renderLog(payload.new);
@@ -149,15 +165,15 @@ app.get('/romeo/ds', (req, res) => {
 });
 
 // ==========================================
-// 2. ULTRA-FAST PROXY LOGIC (Root / and everything else)
+// 2. ULTRA-FAST PROXY LOGIC (RAW BINARY SAFE)
 // ==========================================
 app.all('*', async (req, res) => {
-    // Ignore internal requests
+    // Ignore internal favicon requests
     if (req.path === '/favicon.ico') return res.status(204).end();
 
     const startTime = Date.now();
     
-    // Yahan target URL ke aage / ka hisab lagaya gaya hai as requested
+    // Ensure URL is perfectly mapped
     const baseUrl = TARGET_URL.endsWith('/') ? TARGET_URL.slice(0, -1) : TARGET_URL;
     const targetUrl = `${baseUrl}${req.originalUrl}`;
 
@@ -172,34 +188,52 @@ app.all('*', async (req, res) => {
             headers: forwardHeaders,
         };
 
-        if (!['GET', 'HEAD'].includes(req.method)) {
-            fetchOptions.body = typeof req.body === 'object' ? JSON.stringify(req.body) : req.body;
+        // Agar body hai toh as a raw Buffer forward karega
+        if (!['GET', 'HEAD'].includes(req.method) && req.body && Buffer.isBuffer(req.body) && req.body.length > 0) {
+            fetchOptions.body = req.body;
         }
 
-        // 1. GAME KO REQUEST SEND KI
+        // 1. GAME KO REQUEST BHEJNA
         const response = await fetch(targetUrl, fetchOptions);
-        const responseText = await response.text();
+        
+        // GAME CRASH FIX: Response ko text ki jagah ArrayBuffer (Binary) me lena zaroori hai
+        const resArrayBuffer = await response.arrayBuffer();
+        const resBuffer = Buffer.from(resArrayBuffer);
         const durationMs = Date.now() - startTime;
 
-        // 2. FORAN RESPONSE WAPIS BHEJA (0ms block)
+        // 2. FORAN RESPONSE WAPIS Dena (Headers copy karke)
         response.headers.forEach((value, name) => {
-            if (name.toLowerCase() !== 'content-encoding') { 
+            // Compression encoding bypass kardo takay buffer sahi read ho game me
+            if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(name.toLowerCase())) { 
                 res.setHeader(name, value);
             }
         });
-        res.status(response.status).send(responseText);
-
-        // 3. BACKGROUND ME SUPABASE PAR SAVE KIYA (Is se proxy slow nahi hogi)
-        let parsedRes = responseText;
-        try { parsedRes = JSON.stringify(JSON.parse(responseText), null, 2); } catch(e) {}
         
-        let parsedReq = req.body;
-        if (typeof req.body === 'object' && Object.keys(req.body).length > 0) {
-            parsedReq = JSON.stringify(req.body, null, 2);
-        } else if (typeof req.body === 'object') {
-            parsedReq = "Empty / No Payload";
+        // Exact binary buffer response send karna
+        res.status(response.status).send(resBuffer);
+
+        // 3. BACKGROUND ME SUPABASE PAR SAVE (Proxy latency = 0ms)
+        let parsedReq = "Empty / No Payload";
+        if (Buffer.isBuffer(req.body) && req.body.length > 0) {
+            const reqStr = req.body.toString('utf8');
+            try { 
+                parsedReq = JSON.stringify(JSON.parse(reqStr), null, 2); 
+            } catch(e) { 
+                parsedReq = reqStr; // Agar binary/string mix hai
+            }
         }
 
+        let parsedRes = "Empty Response";
+        if (resBuffer.length > 0) {
+            const resStr = resBuffer.toString('utf8');
+            try { 
+                parsedRes = JSON.stringify(JSON.parse(resStr), null, 2); 
+            } catch(e) { 
+                parsedRes = resStr;
+            }
+        }
+
+        // Supabase REST insert (Silent)
         fetch(`${SUPABASE_URL}/rest/v1/logs`, {
             method: 'POST',
             headers: {
@@ -225,7 +259,6 @@ app.all('*', async (req, res) => {
             res.status(500).json({ error: 'Proxy Request Failed', details: error.message });
         }
 
-        // Error log to Supabase
         fetch(`${SUPABASE_URL}/rest/v1/logs`, {
             method: 'POST',
             headers: {
@@ -238,7 +271,7 @@ app.all('*', async (req, res) => {
                 path: req.originalUrl,
                 status: 500,
                 duration: `${durationMs}ms`,
-                request_body: "Failed to forward",
+                request_body: "Failed to forward request",
                 response_body: `Error: ${error.message}`
             })
         }).catch(e => console.log(e));
