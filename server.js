@@ -1,52 +1,76 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(cors());
 app.use(express.raw({ type: '*/*', limit: '100mb' }));
 
-// 🚀 1. FREE FIRE KA ORIGINAL OFFICIAL SERVER (No more Astutech!)
-const TARGET_URL = 'https://freefire.dir.garena.com/'; 
+// 🚀 FREE FIRE KA ASLI REGIONAL SERVER
+const TARGET_URL = 'https://csoversea.castle.freefiremobile.com'; 
 
 let requestLogs = []; 
+let gameItemsDB = {}; // Saari JSON files ka data yahan aayega
+let defaultBundleId = "100123"; // Backup default ID
 
 // ==========================================
-// 🛠️ THE REAL-TIME SPOOF ENGINE (Hacks Injector)
+// 📥 LOCAL FILES AUTO-LOADER (From /public folder)
+// ==========================================
+function loadLocalItems() {
+    try {
+        const publicDir = path.join(__dirname, 'public');
+        
+        // Check agar public folder majood hai
+        if (fs.existsSync(publicDir)) {
+            const files = fs.readdirSync(publicDir);
+            console.log(`Found ${files.length} files in /public folder...`);
+
+            files.forEach(file => {
+                if (file.endsWith('.json')) {
+                    try {
+                        const filePath = path.join(publicDir, file);
+                        const fileData = fs.readFileSync(filePath, 'utf8');
+                        const parsedData = JSON.parse(fileData);
+                        
+                        // Har file ke data ko uske naam ke hisaab se DB me save kar lo
+                        gameItemsDB[file] = parsedData;
+                        console.log(`✅ Loaded: ${file}`);
+                    } catch (err) {
+                        console.log(`❌ Failed to parse ${file}:`, err.message);
+                    }
+                }
+            });
+            console.log("🚀 All Items Loaded Successfully into Memory!");
+        } else {
+            console.log("⚠️ Public folder nahi mila! Make sure server.js ke sath 'public' folder majood ho.");
+        }
+    } catch (err) {
+        console.log("❌ File Loading Error:", err.message);
+    }
+}
+
+// Server start hotay hi saari files load kar lo
+loadLocalItems();
+
+// ==========================================
+// 🛠️ THE REAL-TIME SPOOF ENGINE
 // ==========================================
 const SPOOF_RULES = {
-    
-    // 1. ENTRY GATE: Version aur Server check (Original data ko bypass karna)
+    // 1. ENTRY GATE: Game start bypass
     "/ver.php": (jsonData) => {
-        // Hum original server ka response aane denge taake ping asli Garena ka hi rahe
         jsonData.is_server_open = true;
         jsonData.login_failed_count = 0;
-        
-        // Agar tu chahe to in-game notice board par apna naam likh sakta hai:
-        // jsonData.billboard_msg = "Romeo Official VIP Mod Active!";
-        
         return jsonData;
     },
     
-    // 2. BUNDLES & SKINS INJECTOR (Lobby Data)
-    // NOTE: Ye "/get_profile" sirf example path hai. 
-    // Tujhe Dashboard par dekhna hoga ke asli path kya hai (jaise /user/info ya /sync)
-    "/get_profile": (jsonData) => {
-        
-        // Yahan hum game ko batayenge ke is bande ne konsay VIP bundles pehne hue hain
+    // 2. AUTO-EQUIP VIP BUNDLE LOGIC
+    "/get_user_info": (jsonData) => {
+        // Yahan jab asli path aur JSON structure milega, hum gameItemsDB se 
+        // default items utha kar yahan replace kar denge.
         if(jsonData && jsonData.data) {
-            
-            // Example: Agar game check kare ke kya pehna hai, hum apni IDs inject kar denge
-            // Tujhe bas baad me yahan asli Bundle IDs dalni hain jo tu capture karega
-            jsonData.data.equipped_bundle = 999123; // Rare Bundle ID yahan aayegi
-            jsonData.data.equipped_weapons = [
-                10014, // M1014 Evo (Example ID)
-                47001  // AK47 Blue Flame (Example ID)
-            ];
-            
-            // Diamonds bhi fake dikha sakte ho lobby me!
-            jsonData.data.diamonds = 999999; 
+            jsonData.data.equipped_bundle = defaultBundleId; 
         }
-        
         return jsonData;
     }
 };
@@ -77,7 +101,7 @@ app.get('/romeo/ds', (req, res) => {
             <header class="flex flex-col sm:flex-row justify-between items-center border-b border-green-900/40 pb-4 mb-6 gap-4">
                 <div>
                     <h1 class="text-3xl font-black text-green-500 tracking-tighter italic">ROMEO_VIP<span class="text-white">.NEXUS</span></h1>
-                    <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Target: Garena Official Server</p>
+                    <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Target: CSOversea Castle Server</p>
                 </div>
                 <div class="flex gap-3 items-center">
                     <button onclick="clearLogs()" class="px-4 py-2 bg-red-900/20 text-red-500 border border-red-500 hover:bg-red-500 hover:text-white transition text-xs font-bold rounded">CLEAR TRAFFIC</button>
@@ -89,7 +113,7 @@ app.get('/romeo/ds', (req, res) => {
             <div id="logs-container" class="space-y-6"></div>
         </div>
         <script>
-            const STORAGE_KEY = 'romeo_vip_logs';
+            const STORAGE_KEY = 'romeo_vip_logs_v5';
             let localLogs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 
             function copyData(btn, safeEncodedData) {
@@ -180,6 +204,11 @@ app.get('/romeo/ds', (req, res) => {
 app.get('/api/internal/logs', (req, res) => res.json(requestLogs));
 app.post('/api/internal/clear', (req, res) => { requestLogs = []; res.json({ success: true }); });
 
+// Testing endpoint: Dekhne ke liye ke items load huay ya nahi
+app.get('/api/internal/items', (req, res) => {
+    res.json({ loadedFiles: Object.keys(gameItemsDB) });
+});
+
 app.all('*', async (req, res) => {
     if (req.path === '/romeo/ds' || req.path.startsWith('/api/internal') || req.path === '/favicon.ico') return;
 
@@ -206,7 +235,7 @@ app.all('*', async (req, res) => {
         if (rulePath) {
             try {
                 let json = JSON.parse(buffer.toString('utf8'));
-                json = SPOOF_RULES[rulePath](json); // Apply hacks
+                json = SPOOF_RULES[rulePath](json); 
                 buffer = Buffer.from(JSON.stringify(json, null, 2));
                 isSpoofed = true;
             } catch(e) {}
