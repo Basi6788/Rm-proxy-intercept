@@ -6,7 +6,7 @@ app.use(cors());
 app.use(express.raw({ type: '*/*', limit: '100mb' }));
 
 // 🚀 1. FREE FIRE KA ORIGINAL OFFICIAL SERVER (No more Astutech!)
-const TARGET_URL = 'https://freefire.dir.garena.com'; 
+const TARGET_URL = 'https://freefire.dir.garena.com/'; 
 
 let requestLogs = []; 
 
