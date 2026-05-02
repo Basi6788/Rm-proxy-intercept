@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.raw({ type: '*/*', limit: '100mb' }));
 
 // 🚀 FREE FIRE KA ASLI REGIONAL SERVER
-const TARGET_URL = 'https://csoversea.castle.freefiremobile.com'; 
+const TARGET_URL = 'https://csoversea.castle.freefiremobile.com/'; 
 
 let requestLogs = []; 
 let gameItemsDB = {}; // Saari JSON files ka data yahan aayega
