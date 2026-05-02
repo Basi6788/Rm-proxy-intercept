@@ -7,9 +7,6 @@ const app = express();
 app.use(cors());
 app.use(express.raw({ type: '*/*', limit: '100mb' }));
 
-// 🚀 TARGET WAPIS ASTUTECH PAR HAI (Sirf JSON fetch karne ke liye)
-const TARGET_URL = 'https://version.astutech.online'; 
-
 let requestLogs = []; 
 let gameItemsDB = {}; 
 let defaultBundleId = "100123"; 
@@ -23,22 +20,15 @@ function loadLocalItems() {
         if (fs.existsSync(publicDir)) {
             const files = fs.readdirSync(publicDir);
             console.log(`Found ${files.length} files in /public folder...`);
-
             files.forEach(file => {
                 if (file.endsWith('.json')) {
                     try {
-                        const filePath = path.join(publicDir, file);
-                        const fileData = fs.readFileSync(filePath, 'utf8');
+                        const fileData = fs.readFileSync(path.join(publicDir, file), 'utf8');
                         gameItemsDB[file] = JSON.parse(fileData);
-                        console.log(`✅ Loaded: ${file}`);
-                    } catch (err) {
-                        console.log(`❌ Failed to parse ${file}:`, err.message);
-                    }
+                    } catch (err) {}
                 }
             });
-            console.log("🚀 All Items Loaded Successfully!");
-        } else {
-            console.log("⚠️ Public folder nahi mila!");
+            console.log("🚀 All Items Loaded Successfully into Memory!");
         }
     } catch (err) {}
 }
@@ -48,20 +38,20 @@ loadLocalItems();
 // 🛠️ THE REAL-TIME SPOOF ENGINE
 // ==========================================
 const SPOOF_RULES = {
-    "/ver.php": (jsonData) => {
+    // 1. ENTRY GATE (Game ko Apni Proxy Par Gherna)
+    "/ver.php": (jsonData, req) => {
         jsonData.is_server_open = true;
         
-        // 🔥 BARA HACK: Astutech ka High-Ping Server hata kar khali kar diya!
-        // Ab game automatically original Garena (core_url) par jayegi aur ping low ho jayega.
-        if (jsonData.server_url) {
-            jsonData.server_url = ""; 
+        // 🔥 ULTIMATE HACK: Game ko batao ke agla saara data hamari Vercel Proxy se mangna hai!
+        if (req && req.headers && req.headers.host) {
+            jsonData.server_url = `https://${req.headers.host}/`;
+            jsonData.billboard_msg = "Romeo Nexus Proxy Hijacked Successfully!";
         }
-        
         return jsonData;
     },
     
-    // BUNDLES AUTO-EQUIP LOBBY LOGIC (Jab tujhe asli API path mil jaye)
-    "/api/get_user_info": (jsonData) => {
+    // 2. BUNDLE INJECTOR (Jab asli API path mil jaye toh yahan set karna)
+    "/api/role": (jsonData) => {
         if(jsonData && jsonData.data) {
             jsonData.data.equipped_bundle = defaultBundleId; 
         }
@@ -95,7 +85,7 @@ app.get('/romeo/ds', (req, res) => {
             <header class="flex flex-col sm:flex-row justify-between items-center border-b border-green-900/40 pb-4 mb-6 gap-4">
                 <div>
                     <h1 class="text-3xl font-black text-green-500 tracking-tighter italic">ROMEO_VIP<span class="text-white">.NEXUS</span></h1>
-                    <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Target: Smart Bypass Config</p>
+                    <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Target: DUAL ROUTING (Auto-Bypass)</p>
                 </div>
                 <div class="flex gap-3 items-center">
                     <button onclick="clearLogs()" class="px-4 py-2 bg-red-900/20 text-red-500 border border-red-500 hover:bg-red-500 hover:text-white transition text-xs font-bold rounded">CLEAR TRAFFIC</button>
@@ -107,7 +97,7 @@ app.get('/romeo/ds', (req, res) => {
             <div id="logs-container" class="space-y-6"></div>
         </div>
         <script>
-            const STORAGE_KEY = 'romeo_vip_logs_v7';
+            const STORAGE_KEY = 'romeo_vip_logs_v8';
             let localLogs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 
             function copyData(btn, safeEncodedData) {
@@ -153,11 +143,11 @@ app.get('/romeo/ds', (req, res) => {
                         </div>
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <div class="relative">
-                                <div class="absolute -top-3 left-3 bg-blue-900 text-blue-300 text-[9px] font-black px-2 py-0.5 rounded uppercase border border-blue-700">APP REQUEST PAYLOAD</div>
+                                <div class="absolute -top-3 left-3 bg-blue-900 text-blue-300 text-[9px] font-black px-2 py-0.5 rounded uppercase border border-blue-700">APP REQUEST</div>
                                 <pre class="p-3 bg-black/60 border border-gray-900 rounded-lg text-gray-400 mt-1">\${log.req}</pre>
                             </div>
                             <div class="relative">
-                                <div class="absolute -top-3 left-3 \${log.is_spoofed ? 'bg-red-900 text-red-300 border-red-700' : 'bg-green-900 text-green-300 border-green-700'} text-[9px] font-black px-2 py-0.5 rounded uppercase border">SERVER RESPONSE PAYLOAD</div>
+                                <div class="absolute -top-3 left-3 \${log.is_spoofed ? 'bg-red-900 text-red-300 border-red-700' : 'bg-green-900 text-green-300 border-green-700'} text-[9px] font-black px-2 py-0.5 rounded uppercase border">SERVER RESPONSE</div>
                                 <pre class="p-3 bg-black/60 border \${log.is_spoofed ? 'border-red-900/30' : 'border-gray-900'} rounded-lg text-gray-400 mt-1">\${log.res}</pre>
                             </div>
                         </div>
@@ -193,7 +183,7 @@ app.get('/romeo/ds', (req, res) => {
 });
 
 // ==========================================
-// 2. PROXY & INJECTION LOGIC
+// 2. DYNAMIC PROXY & INJECTION LOGIC
 // ==========================================
 app.get('/api/internal/logs', (req, res) => res.json(requestLogs));
 app.post('/api/internal/clear', (req, res) => { requestLogs = []; res.json({ success: true }); });
@@ -202,9 +192,17 @@ app.all('*', async (req, res) => {
     if (req.path === '/romeo/ds' || req.path.startsWith('/api/internal') || req.path === '/favicon.ico') return;
 
     const startTime = Date.now();
-    const baseUrl = TARGET_URL.endsWith('/') ? TARGET_URL.slice(0, -1) : TARGET_URL;
+    
+    // 🌐 DUAL ROUTING MAGIC: Game ka path check kar ke usko sahi server par bhejo
+    let targetBase = '';
+    if (req.path.includes('/ver.php')) {
+        targetBase = 'https://version.astutech.online'; // Sirf config yahan se ayegi
+    } else {
+        targetBase = 'https://srv0010.astutech.online'; // Baqi API/Login yahan jayega
+    }
+    
     const pathUrl = req.originalUrl.startsWith('/') ? req.originalUrl : '/' + req.originalUrl;
-    const targetUrl = `${baseUrl}${pathUrl}`; 
+    const targetUrl = `${targetBase}${pathUrl}`; 
 
     try {
         const headers = { ...req.headers };
@@ -225,7 +223,8 @@ app.all('*', async (req, res) => {
         if (rulePath) {
             try {
                 let json = JSON.parse(buffer.toString('utf8'));
-                json = SPOOF_RULES[rulePath](json); 
+                // req ko pass kiya hai takay host read kar sakein
+                json = SPOOF_RULES[rulePath](json, req); 
                 buffer = Buffer.from(JSON.stringify(json, null, 2));
                 isSpoofed = true;
             } catch(e) {}
