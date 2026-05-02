@@ -7,8 +7,8 @@ const app = express();
 app.use(cors());
 app.use(express.raw({ type: '*/*', limit: '100mb' }));
 
-// 🚀 1. FREE FIRE ASLI HTTP/API DIRECTORY SERVER
-const TARGET_URL = 'https://dl.dir.freefiremobile.com'; 
+// 🚀 TARGET WAPIS ASTUTECH PAR HAI (Sirf JSON fetch karne ke liye)
+const TARGET_URL = 'https://version.astutech.online'; 
 
 let requestLogs = []; 
 let gameItemsDB = {}; 
@@ -36,16 +36,12 @@ function loadLocalItems() {
                     }
                 }
             });
-            console.log("🚀 All Items Loaded Successfully into Memory!");
+            console.log("🚀 All Items Loaded Successfully!");
         } else {
-            console.log("⚠️ Public folder nahi mila! Make sure server.js ke sath 'public' folder majood ho.");
+            console.log("⚠️ Public folder nahi mila!");
         }
-    } catch (err) {
-        console.log("❌ File Loading Error:", err.message);
-    }
+    } catch (err) {}
 }
-
-// Server start hotay hi files load hongi
 loadLocalItems();
 
 // ==========================================
@@ -54,10 +50,18 @@ loadLocalItems();
 const SPOOF_RULES = {
     "/ver.php": (jsonData) => {
         jsonData.is_server_open = true;
-        jsonData.login_failed_count = 0;
+        
+        // 🔥 BARA HACK: Astutech ka High-Ping Server hata kar khali kar diya!
+        // Ab game automatically original Garena (core_url) par jayegi aur ping low ho jayega.
+        if (jsonData.server_url) {
+            jsonData.server_url = ""; 
+        }
+        
         return jsonData;
     },
-    "/get_user_info": (jsonData) => {
+    
+    // BUNDLES AUTO-EQUIP LOBBY LOGIC (Jab tujhe asli API path mil jaye)
+    "/api/get_user_info": (jsonData) => {
         if(jsonData && jsonData.data) {
             jsonData.data.equipped_bundle = defaultBundleId; 
         }
@@ -91,7 +95,7 @@ app.get('/romeo/ds', (req, res) => {
             <header class="flex flex-col sm:flex-row justify-between items-center border-b border-green-900/40 pb-4 mb-6 gap-4">
                 <div>
                     <h1 class="text-3xl font-black text-green-500 tracking-tighter italic">ROMEO_VIP<span class="text-white">.NEXUS</span></h1>
-                    <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Target: Free Fire Official API</p>
+                    <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Target: Smart Bypass Config</p>
                 </div>
                 <div class="flex gap-3 items-center">
                     <button onclick="clearLogs()" class="px-4 py-2 bg-red-900/20 text-red-500 border border-red-500 hover:bg-red-500 hover:text-white transition text-xs font-bold rounded">CLEAR TRAFFIC</button>
@@ -103,7 +107,7 @@ app.get('/romeo/ds', (req, res) => {
             <div id="logs-container" class="space-y-6"></div>
         </div>
         <script>
-            const STORAGE_KEY = 'romeo_vip_logs_v6';
+            const STORAGE_KEY = 'romeo_vip_logs_v7';
             let localLogs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 
             function copyData(btn, safeEncodedData) {
@@ -198,11 +202,9 @@ app.all('*', async (req, res) => {
     if (req.path === '/romeo/ds' || req.path.startsWith('/api/internal') || req.path === '/favicon.ico') return;
 
     const startTime = Date.now();
-    
-    // 🌐 BARA FIX: Perfect URL formatting slash ke sath
     const baseUrl = TARGET_URL.endsWith('/') ? TARGET_URL.slice(0, -1) : TARGET_URL;
     const pathUrl = req.originalUrl.startsWith('/') ? req.originalUrl : '/' + req.originalUrl;
-    const targetUrl = \`\${baseUrl}\${pathUrl}\`; 
+    const targetUrl = `${baseUrl}${pathUrl}`; 
 
     try {
         const headers = { ...req.headers };
@@ -229,7 +231,7 @@ app.all('*', async (req, res) => {
             } catch(e) {}
         }
 
-        const duration = \`\${Date.now() - startTime}ms\`;
+        const duration = `${Date.now() - startTime}ms`;
 
         response.headers.forEach((v, n) => {
             if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(n.toLowerCase())) { 
@@ -242,14 +244,14 @@ app.all('*', async (req, res) => {
         let parsedReq = "Empty Payload";
         if (Buffer.isBuffer(req.body) && req.body.length > 0) {
             const reqStr = req.body.toString('utf8');
-            if (/[\x00-\x08\x0E-\x1F]/.test(reqStr)) parsedReq = "[ENCRYPTED BINARY]\\nHex: " + req.body.toString('hex').substring(0, 300) + "...";
+            if (/[\x00-\x08\x0E-\x1F]/.test(reqStr)) parsedReq = "[ENCRYPTED BINARY]\nHex: " + req.body.toString('hex').substring(0, 300) + "...";
             else { try { parsedReq = JSON.stringify(JSON.parse(reqStr), null, 2); } catch(e) { parsedReq = reqStr; } }
         }
 
         let parsedRes = "Empty Response";
         if (buffer.length > 0) {
             const resStr = buffer.toString('utf8');
-            if (/[\x00-\x08\x0E-\x1F]/.test(resStr) && !isSpoofed) parsedRes = "[ENCRYPTED BINARY]\\nHex: " + buffer.toString('hex').substring(0, 300) + "...";
+            if (/[\x00-\x08\x0E-\x1F]/.test(resStr) && !isSpoofed) parsedRes = "[ENCRYPTED BINARY]\nHex: " + buffer.toString('hex').substring(0, 300) + "...";
             else { try { parsedRes = JSON.stringify(JSON.parse(resStr), null, 2); } catch(e) { parsedRes = resStr; } }
         }
 
