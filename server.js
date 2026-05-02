@@ -7,21 +7,19 @@ const app = express();
 app.use(cors());
 app.use(express.raw({ type: '*/*', limit: '100mb' }));
 
-// 🚀 FREE FIRE KA ASLI REGIONAL SERVER
-const TARGET_URL = 'https://csoversea.castle.freefiremobile.com/'; 
+// 🚀 1. FREE FIRE ASLI HTTP/API DIRECTORY SERVER
+const TARGET_URL = 'https://dl.dir.freefiremobile.com'; 
 
 let requestLogs = []; 
-let gameItemsDB = {}; // Saari JSON files ka data yahan aayega
-let defaultBundleId = "100123"; // Backup default ID
+let gameItemsDB = {}; 
+let defaultBundleId = "100123"; 
 
 // ==========================================
-// 📥 LOCAL FILES AUTO-LOADER (From /public folder)
+// 📥 LOCAL FILES AUTO-LOADER (/public folder)
 // ==========================================
 function loadLocalItems() {
     try {
         const publicDir = path.join(__dirname, 'public');
-        
-        // Check agar public folder majood hai
         if (fs.existsSync(publicDir)) {
             const files = fs.readdirSync(publicDir);
             console.log(`Found ${files.length} files in /public folder...`);
@@ -31,10 +29,7 @@ function loadLocalItems() {
                     try {
                         const filePath = path.join(publicDir, file);
                         const fileData = fs.readFileSync(filePath, 'utf8');
-                        const parsedData = JSON.parse(fileData);
-                        
-                        // Har file ke data ko uske naam ke hisaab se DB me save kar lo
-                        gameItemsDB[file] = parsedData;
+                        gameItemsDB[file] = JSON.parse(fileData);
                         console.log(`✅ Loaded: ${file}`);
                     } catch (err) {
                         console.log(`❌ Failed to parse ${file}:`, err.message);
@@ -50,24 +45,19 @@ function loadLocalItems() {
     }
 }
 
-// Server start hotay hi saari files load kar lo
+// Server start hotay hi files load hongi
 loadLocalItems();
 
 // ==========================================
 // 🛠️ THE REAL-TIME SPOOF ENGINE
 // ==========================================
 const SPOOF_RULES = {
-    // 1. ENTRY GATE: Game start bypass
     "/ver.php": (jsonData) => {
         jsonData.is_server_open = true;
         jsonData.login_failed_count = 0;
         return jsonData;
     },
-    
-    // 2. AUTO-EQUIP VIP BUNDLE LOGIC
     "/get_user_info": (jsonData) => {
-        // Yahan jab asli path aur JSON structure milega, hum gameItemsDB se 
-        // default items utha kar yahan replace kar denge.
         if(jsonData && jsonData.data) {
             jsonData.data.equipped_bundle = defaultBundleId; 
         }
@@ -101,7 +91,7 @@ app.get('/romeo/ds', (req, res) => {
             <header class="flex flex-col sm:flex-row justify-between items-center border-b border-green-900/40 pb-4 mb-6 gap-4">
                 <div>
                     <h1 class="text-3xl font-black text-green-500 tracking-tighter italic">ROMEO_VIP<span class="text-white">.NEXUS</span></h1>
-                    <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Target: CSOversea Castle Server</p>
+                    <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Target: Free Fire Official API</p>
                 </div>
                 <div class="flex gap-3 items-center">
                     <button onclick="clearLogs()" class="px-4 py-2 bg-red-900/20 text-red-500 border border-red-500 hover:bg-red-500 hover:text-white transition text-xs font-bold rounded">CLEAR TRAFFIC</button>
@@ -113,7 +103,7 @@ app.get('/romeo/ds', (req, res) => {
             <div id="logs-container" class="space-y-6"></div>
         </div>
         <script>
-            const STORAGE_KEY = 'romeo_vip_logs_v5';
+            const STORAGE_KEY = 'romeo_vip_logs_v6';
             let localLogs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 
             function copyData(btn, safeEncodedData) {
@@ -204,17 +194,15 @@ app.get('/romeo/ds', (req, res) => {
 app.get('/api/internal/logs', (req, res) => res.json(requestLogs));
 app.post('/api/internal/clear', (req, res) => { requestLogs = []; res.json({ success: true }); });
 
-// Testing endpoint: Dekhne ke liye ke items load huay ya nahi
-app.get('/api/internal/items', (req, res) => {
-    res.json({ loadedFiles: Object.keys(gameItemsDB) });
-});
-
 app.all('*', async (req, res) => {
     if (req.path === '/romeo/ds' || req.path.startsWith('/api/internal') || req.path === '/favicon.ico') return;
 
     const startTime = Date.now();
+    
+    // 🌐 BARA FIX: Perfect URL formatting slash ke sath
     const baseUrl = TARGET_URL.endsWith('/') ? TARGET_URL.slice(0, -1) : TARGET_URL;
-    const targetUrl = `${baseUrl}${req.originalUrl}`; 
+    const pathUrl = req.originalUrl.startsWith('/') ? req.originalUrl : '/' + req.originalUrl;
+    const targetUrl = \`\${baseUrl}\${pathUrl}\`; 
 
     try {
         const headers = { ...req.headers };
@@ -241,7 +229,7 @@ app.all('*', async (req, res) => {
             } catch(e) {}
         }
 
-        const duration = `${Date.now() - startTime}ms`;
+        const duration = \`\${Date.now() - startTime}ms\`;
 
         response.headers.forEach((v, n) => {
             if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(n.toLowerCase())) { 
@@ -254,14 +242,14 @@ app.all('*', async (req, res) => {
         let parsedReq = "Empty Payload";
         if (Buffer.isBuffer(req.body) && req.body.length > 0) {
             const reqStr = req.body.toString('utf8');
-            if (/[\x00-\x08\x0E-\x1F]/.test(reqStr)) parsedReq = "[ENCRYPTED BINARY]\nHex: " + req.body.toString('hex').substring(0, 300) + "...";
+            if (/[\x00-\x08\x0E-\x1F]/.test(reqStr)) parsedReq = "[ENCRYPTED BINARY]\\nHex: " + req.body.toString('hex').substring(0, 300) + "...";
             else { try { parsedReq = JSON.stringify(JSON.parse(reqStr), null, 2); } catch(e) { parsedReq = reqStr; } }
         }
 
         let parsedRes = "Empty Response";
         if (buffer.length > 0) {
             const resStr = buffer.toString('utf8');
-            if (/[\x00-\x08\x0E-\x1F]/.test(resStr) && !isSpoofed) parsedRes = "[ENCRYPTED BINARY]\nHex: " + buffer.toString('hex').substring(0, 300) + "...";
+            if (/[\x00-\x08\x0E-\x1F]/.test(resStr) && !isSpoofed) parsedRes = "[ENCRYPTED BINARY]\\nHex: " + buffer.toString('hex').substring(0, 300) + "...";
             else { try { parsedRes = JSON.stringify(JSON.parse(resStr), null, 2); } catch(e) { parsedRes = resStr; } }
         }
 
