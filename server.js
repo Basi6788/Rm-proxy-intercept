@@ -9,7 +9,7 @@ app.use(express.raw({ type: '*/*', limit: '50mb' }));
 
 const TARGET_URL = 'https://version.astutech.online'; 
 
-// Server ki temporary memory
+// Server ki temporary memory (Dashboard ke liye)
 let requestLogs = []; 
 
 // ==========================================
@@ -176,10 +176,10 @@ app.get('/api/internal/logs', (req, res) => {
 });
 
 // ==========================================
-// 3. ULTRA-FAST PROXY LOGIC (RAW BINARY SAFE)
+// 3. ULTRA-FAST PROXY LOGIC (RAW BINARY SAFE + COMPRESSION BYPASS)
 // ==========================================
 app.all('*', async (req, res) => {
-    // Apne routes ko ignore karo takay loop na bane
+    // Apne internal routes ignore karo
     if (req.path === '/romeo/ds' || req.path === '/api/internal/logs' || req.path === '/favicon.ico') {
         return;
     }
@@ -193,26 +193,27 @@ app.all('*', async (req, res) => {
         delete forwardHeaders.host; 
         delete forwardHeaders['content-length']; 
         delete forwardHeaders['connection']; 
+        
+        // BARA FIX: Ye header udane se target server compress data (kachra) nahi bhejega
+        delete forwardHeaders['accept-encoding']; 
 
         const fetchOptions = {
             method: req.method,
             headers: forwardHeaders,
         };
 
-        // Body RAW format me aage forward ho rahi hai
+        // Agar POST/PUT hai toh raw buffer aage bhejo
         if (!['GET', 'HEAD'].includes(req.method) && req.body && Buffer.isBuffer(req.body) && req.body.length > 0) {
             fetchOptions.body = req.body;
         }
 
-        // 1. GAME KO REQUEST BHEJNA
+        // 1. GAME KO REQUEST SEND KI
         const response = await fetch(targetUrl, fetchOptions);
-        
-        // 2. BINARY RESPONSE LENA
         const resArrayBuffer = await response.arrayBuffer();
         const resBuffer = Buffer.from(resArrayBuffer);
         const durationMs = Date.now() - startTime;
 
-        // 3. FORAN GAME KO RESPONSE WAPIS DENA
+        // 2. FORAN RESPONSE WAPIS BHEJA (Compression bypass ke sath)
         response.headers.forEach((value, name) => {
             if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(name.toLowerCase())) { 
                 res.setHeader(name, value);
@@ -221,29 +222,31 @@ app.all('*', async (req, res) => {
         res.status(response.status).send(resBuffer);
 
         // ==========================================
-        // 4. BACKGROUND PAR LOGS SAVE KARNA (Dashboard ke liye)
+        // 4. SMART LOG PARSER (Text, JSON, ya Hex Viewer)
         // ==========================================
         let parsedReq = "Empty / No Payload";
         if (Buffer.isBuffer(req.body) && req.body.length > 0) {
             const reqStr = req.body.toString('utf8');
-            try { 
-                parsedReq = JSON.stringify(JSON.parse(reqStr), null, 2); 
-            } catch(e) { 
-                parsedReq = reqStr; // Agar binary/string mix hai
+            // Check agar unreadable binary characters hain toh hex me dikhao
+            if (/[\x00-\x08\x0E-\x1F]/.test(reqStr)) {
+                parsedReq = "[BINARY/ENCRYPTED DATA] Hex: " + req.body.toString('hex').substring(0, 300) + "...";
+            } else {
+                try { parsedReq = JSON.stringify(JSON.parse(reqStr), null, 2); } 
+                catch(e) { parsedReq = reqStr; }
             }
         }
 
         let parsedRes = "Empty Response";
         if (resBuffer.length > 0) {
             const resStr = resBuffer.toString('utf8');
-            try { 
-                parsedRes = JSON.stringify(JSON.parse(resStr), null, 2); 
-            } catch(e) { 
-                parsedRes = resStr;
+            if (/[\x00-\x08\x0E-\x1F]/.test(resStr)) {
+                parsedRes = "[BINARY/ENCRYPTED DATA] Hex: " + resBuffer.toString('hex').substring(0, 300) + "...";
+            } else {
+                try { parsedRes = JSON.stringify(JSON.parse(resStr), null, 2); } 
+                catch(e) { parsedRes = resStr; }
             }
         }
 
-        // Generate a unique ID for the frontend to prevent duplicates
         const logId = Date.now().toString() + '-' + Math.floor(Math.random() * 1000);
 
         requestLogs.unshift({
@@ -256,15 +259,11 @@ app.all('*', async (req, res) => {
             response_body: parsedRes
         });
 
-        // Server sirf latest 50 logs hold karega, baqi client apne browser me utha ke save kar lega
         if (requestLogs.length > 50) requestLogs.pop();
 
     } catch (error) {
         const durationMs = Date.now() - startTime;
-        
-        if (!res.headersSent) {
-            res.status(500).json({ error: 'Proxy Request Failed', details: error.message });
-        }
+        if (!res.headersSent) res.status(500).json({ error: 'Proxy Request Failed', details: error.message });
 
         const logId = Date.now().toString() + '-' + Math.floor(Math.random() * 1000);
         requestLogs.unshift({
