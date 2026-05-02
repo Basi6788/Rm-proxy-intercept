@@ -1,22 +1,40 @@
 const express = require('express');
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 app.use(cors());
 app.use(express.raw({ type: '*/*', limit: '100mb' }));
 
-// 🚀 FALLBACK TARGET (Sirf un routes ke liye jo tune abhi tak hardcode nahi kiye)
+// 🚀 FALLBACK TARGET
 const FALLBACK_URL = 'https://srv0010.astutech.online'; 
 
 let requestLogs = []; 
+let gameItemsDB = {}; 
+
+function loadLocalItems() {
+    try {
+        const publicDir = path.join(__dirname, 'public');
+        if (fs.existsSync(publicDir)) {
+            const files = fs.readdirSync(publicDir);
+            files.forEach(file => {
+                if (file.endsWith('.json')) {
+                    try {
+                        gameItemsDB[file] = JSON.parse(fs.readFileSync(path.join(publicDir, file), 'utf8'));
+                    } catch (err) {}
+                }
+            });
+        }
+    } catch (err) {}
+}
+loadLocalItems();
 
 // ==========================================
-// 🛠️ THE PRIVATE EMULATOR ENGINE (Zero Astutech for these routes)
+// 🛠️ THE PRIVATE EMULATOR ENGINE
 // ==========================================
-// Yahan hum wo responses hardcode kar rahe hain jo tune mujhe bheje hain!
 const CUSTOM_RESPONSES = {
-    
-    // 1. VERSION CONFIG (JSON)
+    // 1. VERSION CONFIG (Yahan tera vercel URL auto lagta hai)
     "/ver.php": {
         status: 200,
         type: 'application/json',
@@ -37,7 +55,7 @@ const CUSTOM_RESPONSES = {
             "should_check_ab_load": false,
             "force_refresh_restype": "optionalavatarres",
             "remote_version": "2.124.10",
-            "server_url": "https://rm-proxy-intercept.vercel.app/", // TERA APNA VERCEL LINK
+            "server_url": "https://rm-proxy-intercept.vercel.app/", 
             "is_review_server": false,
             "use_login_optional_download": true,
             "use_background_download": true,
@@ -53,21 +71,7 @@ const CUSTOM_RESPONSES = {
             "garena_hint": false
         }))
     },
-
-    // 2. PING ROUTE
-    "/Ping": {
-        status: 401,
-        type: 'text/plain',
-        data: Buffer.from("Unauthorized")
-    },
-
-    // 3. MAJOR LOGIN ROUTE (Tera Bheja Hua Hex)
-    // ⚠️ WARNING: Ye incomplete Hex hai. Naye dashboard se poora copy karke yahan lakar replace karna!
-    "/MajorLogin": {
-        status: 200,
-        type: 'application/octet-stream',
-        data: Buffer.from("0888959efc371202504b1a0253472202494e2a046c69766542860665794a68624763694f694a49557a49314e694973496e4e3263694936496a45694c434a30655841694f694a4b5631516966512e65794a6859324e766457353058326c6b496a6f784e5441794e4451354d5445304e437769626d6c6a61323568625755694f694a6d65573948524546345a454a73576c4e44526e6858", "hex")
-    }
+    // NOTE: /MajorLogin hata diya hai takay DataType error na aye aur game chalti rahe.
 };
 
 // ==========================================
@@ -80,7 +84,7 @@ app.get('/romeo/ds', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Romeo Hybrid Emulator</title>
+        <title>Romeo Hybrid Master</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
             ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -95,8 +99,8 @@ app.get('/romeo/ds', (req, res) => {
         <div class="max-w-7xl mx-auto">
             <header class="flex flex-col sm:flex-row justify-between items-center border-b border-blue-900/40 pb-4 mb-6 gap-4">
                 <div>
-                    <h1 class="text-3xl font-black text-blue-500 tracking-tighter italic">HYBRID<span class="text-white">_NEXUS</span></h1>
-                    <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Target: Custom Local Engine + Fallback</p>
+                    <h1 class="text-3xl font-black text-blue-500 tracking-tighter italic">MASTER<span class="text-white">_NEXUS</span></h1>
+                    <p class="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Target: Hybrid Auto-Router</p>
                 </div>
                 <div class="flex gap-3 items-center">
                     <button onclick="clearLogs()" class="px-4 py-2 bg-red-900/20 text-red-500 border border-red-500 hover:bg-red-500 hover:text-white transition text-xs font-bold rounded">CLEAR TRAFFIC</button>
@@ -108,20 +112,42 @@ app.get('/romeo/ds', (req, res) => {
             <div id="logs-container" class="space-y-6"></div>
         </div>
         <script>
-            const STORAGE_KEY = 'romeo_emu_logs_v1';
+            const STORAGE_KEY = 'romeo_emu_logs_v2';
             let localLogs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 
-            function copyData(btn, safeEncodedData) {
-                const rawData = decodeURIComponent(safeEncodedData);
-                navigator.clipboard.writeText(rawData).then(() => {
-                    const originalHTML = btn.innerHTML;
-                    btn.innerHTML = 'HEX COPIED!';
-                    btn.classList.add('bg-blue-600', 'text-white');
-                    setTimeout(() => {
-                        btn.innerHTML = originalHTML;
-                        btn.classList.remove('bg-blue-600', 'text-white');
-                    }, 1500);
-                });
+            // NAYA MASTER COPY BUTTON JO POORA DATA COPY KAREGA
+            function copyFullLog(btn, logId) {
+                const logData = localLogs.find(l => l.id === logId);
+                if(logData) {
+                    const exportData = {
+                        method: logData.method,
+                        path: logData.path,
+                        status: logData.status,
+                        is_local_mock: logData.is_local,
+                        request: {
+                            parsed: logData.req,
+                            full_hex: logData.full_req_hex
+                        },
+                        response: {
+                            parsed: logData.res,
+                            full_hex: logData.full_res_hex
+                        }
+                    };
+                    
+                    navigator.clipboard.writeText(JSON.stringify(exportData, null, 2)).then(() => {
+                        const originalHTML = btn.innerHTML;
+                        btn.innerHTML = 'COPIED ALL DATA!';
+                        btn.classList.replace('text-yellow-500', 'text-white');
+                        btn.classList.replace('border-yellow-500', 'border-white');
+                        btn.classList.add('bg-yellow-600');
+                        setTimeout(() => {
+                            btn.innerHTML = originalHTML;
+                            btn.classList.replace('text-white', 'text-yellow-500');
+                            btn.classList.replace('border-white', 'border-yellow-500');
+                            btn.classList.remove('bg-yellow-600');
+                        }, 2000);
+                    });
+                }
             }
 
             async function clearLogs() {
@@ -136,10 +162,8 @@ app.get('/romeo/ds', (req, res) => {
                 let html = '';
                 localLogs.forEach(log => {
                     const badge = log.is_local 
-                        ? '<span class="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded font-black border border-blue-400 animate-pulse ml-3 shadow-[0_0_10px_rgba(59,130,246,0.8)]">LOCAL MOCK</span>' 
-                        : '<span class="bg-yellow-600 text-white text-[10px] px-2 py-0.5 rounded font-black border border-yellow-400 ml-3">FALLBACK FETCH</span>';
-                    
-                    const safeResHex = encodeURIComponent(log.full_res_hex);
+                        ? '<span class="bg-blue-600 text-white text-[10px] px-2 py-0.5 rounded font-black border border-blue-400 animate-pulse ml-3">LOCAL MOCK</span>' 
+                        : '<span class="bg-purple-600 text-white text-[10px] px-2 py-0.5 rounded font-black border border-purple-400 ml-3">LIVE FETCH</span>';
                     
                     html += \`
                     <div class="bg-[#0a0a0a] border \${log.is_local ? 'border-blue-900/50' : 'border-gray-800'} rounded-xl p-4 log-enter hover:border-gray-600 transition-colors shadow-lg">
@@ -152,16 +176,16 @@ app.get('/romeo/ds', (req, res) => {
                             <div class="flex items-center gap-4">
                                 <span class="text-gray-500 text-xs font-bold">\${log.duration}</span>
                                 <span class="\${log.is_local ? 'text-blue-500' : 'text-green-500'} text-sm font-black bg-gray-900 px-2 py-1 rounded">\${log.status}</span>
-                                <button onclick="copyData(this, '\${safeResHex}')" class="text-xs font-bold text-yellow-500 border border-yellow-500 hover:bg-yellow-500 hover:text-black px-3 py-1 rounded transition-colors">COPY FULL HEX</button>
+                                <button onclick="copyFullLog(this, '\${log.id}')" class="text-xs font-black text-yellow-500 border border-yellow-500 hover:bg-yellow-500 hover:text-black px-4 py-1.5 rounded transition-colors shadow-[0_0_10px_rgba(234,179,8,0.2)]">COPY FULL DATA (JSON + HEX)</button>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <div class="relative">
-                                <div class="absolute -top-3 left-3 bg-gray-900 text-gray-300 text-[9px] font-black px-2 py-0.5 rounded uppercase border border-gray-700">APP REQUEST PAYLOAD</div>
+                                <div class="absolute -top-3 left-3 bg-gray-900 text-gray-300 text-[9px] font-black px-2 py-0.5 rounded uppercase border border-gray-700">APP REQUEST</div>
                                 <pre class="p-3 bg-black/60 border border-gray-900 rounded-lg text-gray-400 mt-1">\${log.req}</pre>
                             </div>
                             <div class="relative">
-                                <div class="absolute -top-3 left-3 \${log.is_local ? 'bg-blue-900 text-blue-300 border-blue-700' : 'bg-green-900 text-green-300 border-green-700'} text-[9px] font-black px-2 py-0.5 rounded uppercase border">SERVER RESPONSE PAYLOAD</div>
+                                <div class="absolute -top-3 left-3 \${log.is_local ? 'bg-blue-900 text-blue-300 border-blue-700' : 'bg-green-900 text-green-300 border-green-700'} text-[9px] font-black px-2 py-0.5 rounded uppercase border">SERVER RESPONSE</div>
                                 <pre class="p-3 bg-black/60 border \${log.is_local ? 'border-blue-900/30' : 'border-gray-900'} rounded-lg text-gray-400 mt-1">\${log.res}</pre>
                             </div>
                         </div>
@@ -182,7 +206,7 @@ app.get('/romeo/ds', (req, res) => {
                         }
                     });
                     if (updated) {
-                        if(localLogs.length > 100) localLogs = localLogs.slice(0, 100);
+                        if(localLogs.length > 50) localLogs = localLogs.slice(0, 50);
                         localStorage.setItem(STORAGE_KEY, JSON.stringify(localLogs));
                         render();
                     }
@@ -210,11 +234,17 @@ app.all('*', async (req, res) => {
     let status = 500;
     let duration = "0ms";
     let isLocal = false;
+    let reqBuffer = Buffer.alloc(0);
+
+    // Grab raw request body
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.body && Buffer.isBuffer(req.body)) {
+        reqBuffer = req.body;
+    }
 
     try {
         const rulePath = Object.keys(CUSTOM_RESPONSES).find(p => req.path.includes(p));
 
-        // 🟢 Agar path MOCK_DB me hai toh direct wahan se uthao (Zero Delay, No Astutech)
+        // 🟢 LOCAL MOCK
         if (rulePath) {
             const mockData = CUSTOM_RESPONSES[rulePath];
             status = mockData.status;
@@ -226,7 +256,7 @@ app.all('*', async (req, res) => {
             duration = "0ms (LOCAL CACHE)";
             isLocal = true;
         } 
-        // 🟡 Agar naya packet hai toh Astutech se fetch karo taake game chalti rahe
+        // 🟡 FALLBACK FETCH (Is se login crash nahi hoga!)
         else {
             const pathUrl = req.originalUrl.startsWith('/') ? req.originalUrl : '/' + req.originalUrl;
             const targetUrl = `${FALLBACK_URL}${pathUrl}`; 
@@ -236,9 +266,7 @@ app.all('*', async (req, res) => {
             delete headers['accept-encoding']; 
 
             const options = { method: req.method, headers };
-            if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.body && Buffer.isBuffer(req.body) && req.body.length > 0) {
-                options.body = req.body;
-            }
+            if (reqBuffer.length > 0) options.body = reqBuffer;
 
             const response = await fetch(targetUrl, options);
             resBuffer = Buffer.from(await response.arrayBuffer());
@@ -254,27 +282,22 @@ app.all('*', async (req, res) => {
         }
 
         // ==========================================
-        // 📊 PARSING FOR DASHBOARD UI
+        // 📊 PARSING FOR MASTER DASHBOARD
         // ==========================================
+        let fullReqHex = reqBuffer.toString('hex');
         let parsedReq = "Empty Payload";
-        if (Buffer.isBuffer(req.body) && req.body.length > 0) {
-            const reqStr = req.body.toString('utf8');
-            if (/[\x00-\x08\x0E-\x1F]/.test(reqStr)) parsedReq = "[ENCRYPTED BINARY]\\nHex: " + req.body.toString('hex').substring(0, 300) + "...";
+        if (reqBuffer.length > 0) {
+            const reqStr = reqBuffer.toString('utf8');
+            if (/[\x00-\x08\x0E-\x1F]/.test(reqStr)) parsedReq = "[BINARY/HEX PREVIEW]\\n" + fullReqHex.substring(0, 300) + "...";
             else { try { parsedReq = JSON.stringify(JSON.parse(reqStr), null, 2); } catch(e) { parsedReq = reqStr; } }
         }
 
+        let fullResHex = resBuffer.toString('hex');
         let parsedRes = "Empty Response";
-        let fullResHex = ""; // Yahan hum full untruncated hex save karenge button ke liye
-        
         if (resBuffer.length > 0) {
-            fullResHex = resBuffer.toString('hex');
             const resStr = resBuffer.toString('utf8');
-            
-            if (/[\x00-\x08\x0E-\x1F]/.test(resStr)) {
-                parsedRes = "[ENCRYPTED BINARY]\\nHex Preview: " + fullResHex.substring(0, 300) + "...";
-            } else { 
-                try { parsedRes = JSON.stringify(JSON.parse(resStr), null, 2); } catch(e) { parsedRes = resStr; } 
-            }
+            if (/[\x00-\x08\x0E-\x1F]/.test(resStr)) parsedRes = "[BINARY/HEX PREVIEW]\\n" + fullResHex.substring(0, 300) + "...";
+            else { try { parsedRes = JSON.stringify(JSON.parse(resStr), null, 2); } catch(e) { parsedRes = resStr; } }
         }
 
         requestLogs.unshift({
@@ -286,7 +309,8 @@ app.all('*', async (req, res) => {
             is_local: isLocal,
             req: parsedReq,
             res: parsedRes,
-            full_res_hex: fullResHex // New Addition for "COPY FULL HEX" Button
+            full_req_hex: fullReqHex, 
+            full_res_hex: fullResHex  
         });
 
         if (requestLogs.length > 50) requestLogs.pop();
