@@ -10,7 +10,7 @@ app.use(express.raw({ type: '*/*', limit: '100mb' }));
 // 🚀 GARENA CORE ENDPOINT
 const GARENA_API = 'https://loginbp.ggpolarbear.com';
 
-// 🔑 AES-CBC CONFIGURATION (Matched with your Python Logic)
+// 🔑 AES-CBC CONFIGURATION
 const AES_KEY = Buffer.from('Yg&tc%DEuh6%Zc^8', 'utf8');
 const AES_IV  = Buffer.from('6oyZDr22E3ychjM%', 'utf8');
 const ALGO    = 'aes-128-cbc';
@@ -21,34 +21,38 @@ let MajorLoginReq, MajorLoginRes;
 // ==========================================
 // 🧠 1. PROTOBUF LOADER
 // ==========================================
-protobuf.load("MajorLoginReq.proto").then(r => MajorLoginReq = r.lookupType("MajorLogin")).catch(() => {});
-protobuf.load("MajorLoginRes.proto").then(r => MajorLoginRes = r.lookupType("MajorLoginRes")).catch(() => {});
+protobuf.load("MajorLoginReq.proto").then(r => MajorLoginReq = r.lookupType("MajorLogin")).catch(() => console.log("Missing Req Proto"));
+protobuf.load("MajorLoginRes.proto").then(r => MajorLoginRes = r.lookupType("MajorLoginRes")).catch(() => console.log("Missing Res Proto"));
 
 // ==========================================
-// 🛠️ 2. CRYPTO ENGINE (Python to Node.js)
+// 🛠️ 2. CRYPTO ENGINE
 // ==========================================
 function decryptData(buffer) {
     try {
         const decipher = crypto.createDecipheriv(ALGO, AES_KEY, AES_IV);
-        // Node.js automatically handles PKCS7 unpadding
         return Buffer.concat([decipher.update(buffer), decipher.final()]);
-    } catch (e) {
-        return null;
-    }
+    } catch (e) { return null; }
 }
 
 function encryptData(buffer) {
     try {
         const cipher = crypto.createCipheriv(ALGO, AES_KEY, AES_IV);
-        // Node.js automatically handles the exact PKCS7 padding your Python script uses
         return Buffer.concat([cipher.update(buffer), cipher.final()]);
-    } catch (e) {
-        return null;
-    }
+    } catch (e) { return null; }
+}
+
+function logTraffic(method, path, status, startTime, reqData, resData) {
+    requestLogs.unshift({
+        id: Date.now() + '-' + Math.floor(Math.random() * 1000),
+        method, path, status,
+        duration: `${Date.now() - startTime}ms`,
+        req: reqData, res: resData
+    });
+    if (requestLogs.length > 50) requestLogs.pop();
 }
 
 // ==========================================
-// 🛡️ 3. LOCAL BYPASS ROUTES
+// 🛡️ 3. LOCAL MOCKS (ver.php)
 // ==========================================
 const LOCAL_RESPONSES = {
     "/ver.php": {
@@ -71,7 +75,7 @@ const LOCAL_RESPONSES = {
             "should_check_ab_load": false,
             "force_refresh_restype": "optionalavatarres",
             "remote_version": "2.124.10",
-            "server_url": "https://rm-proxy-intercept.vercel.app/", // TERA VERCEL LINK
+            "server_url": "https://rm-proxy-intercept.vercel.app/", 
             "is_review_server": false,
             "use_login_optional_download": true,
             "use_background_download": true,
@@ -90,120 +94,18 @@ const LOCAL_RESPONSES = {
 };
 
 // ==========================================
-// 🚀 4. THE CORE PROXY INTERCEPTOR
+// 🚀 4. SPECIFIC ROUTES (MUST BE BEFORE PROXY)
 // ==========================================
-app.all('*', async (req, res) => {
-    if (req.path === '/romeo/ds' || req.path.startsWith('/api/internal') || req.path === '/favicon.ico') return;
 
-    const startTime = Date.now();
-    let reqBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-    let parsedReqLog = "[RAW BINARY]";
-    let parsedResLog = "[RAW BINARY]";
-    let bufferToForward = reqBuffer;
-
-    // --- CHECK LOCAL BYPASS FIRST ---
-    const localRule = Object.keys(LOCAL_RESPONSES).find(p => req.originalUrl.includes(p));
-    if (localRule) {
-        const mock = LOCAL_RESPONSES[localRule];
-        res.setHeader('Content-Type', mock.type);
-        res.status(mock.status).send(mock.data);
-        logTraffic(req.method, req.path, mock.status, startTime, "LOCAL BYPASS", "SUCCESS");
-        return;
-    }
-
-    // --- INTERCEPT REQUEST ---
-    if (reqBuffer.length > 0 && req.path.includes('MajorLogin')) {
-        const decryptedReq = decryptData(reqBuffer);
-        if (decryptedReq && MajorLoginReq) {
-            try {
-                const msg = MajorLoginReq.decode(decryptedReq);
-                const jsonReq = MajorLoginReq.toObject(msg, { defaults: true, bytes: String });
-                parsedReqLog = JSON.stringify(jsonReq, null, 2);
-                
-                // ⚠️ TO MODIFY DATA IN FUTURE: 
-                // jsonReq.device_type = "HackedDevice";
-                // const modifiedProto = MajorLoginReq.encode(MajorLoginReq.create(jsonReq)).finish();
-                // bufferToForward = encryptData(modifiedProto);
-                
-            } catch(e) { parsedReqLog = "[REQ PROTO DECODE ERROR] " + e.message; }
-        } else {
-            parsedReqLog = "[DECRYPTION FAILED] AES Keys did not match.";
-        }
-    }
-
-    // --- FORWARD TO GARENA ---
-    try {
-        let pathUrl = req.originalUrl.replace(/^\//, ''); 
-        const targetUrl = `${GARENA_API}/${pathUrl}`;
-
-        const headers = { ...req.headers };
-        delete headers.host;
-        delete headers['accept-encoding']; 
-        headers['x-forwarded-for'] = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-
-        const response = await fetch(targetUrl, {
-            method: req.method,
-            headers: headers,
-            body: bufferToForward.length > 0 ? bufferToForward : undefined
-        });
-
-        let resBuffer = Buffer.from(await response.arrayBuffer());
-        let bufferToClient = resBuffer;
-
-        // --- INTERCEPT RESPONSE ---
-        if (resBuffer.length > 0 && req.path.includes('MajorLogin')) {
-            const decryptedRes = decryptData(resBuffer);
-            if (decryptedRes && MajorLoginRes) {
-                try {
-                    const msgRes = MajorLoginRes.decode(decryptedRes);
-                    const jsonRes = MajorLoginRes.toObject(msgRes, { defaults: true, bytes: String });
-                    parsedResLog = JSON.stringify(jsonRes, null, 2);
-                    
-                    // ⚠️ TO INJECT SKINS/BUNDLES IN FUTURE:
-                    // jsonRes.token = "MODIFIED_TOKEN";
-                    // const modifiedResProto = MajorLoginRes.encode(MajorLoginRes.create(jsonRes)).finish();
-                    // bufferToClient = encryptData(modifiedResProto);
-
-                } catch(e) { parsedResLog = "[RES PROTO DECODE ERROR] " + e.message; }
-            } else {
-                parsedResLog = "[RES DECRYPTION FAILED] Different key used by server?";
-            }
-        } else if (resBuffer.length > 0) {
-            parsedResLog = `[ENCRYPTED] Size: ${resBuffer.length} bytes`;
-        }
-
-        // --- SEND BACK TO GAME ---
-        response.headers.forEach((v, n) => {
-            if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(n.toLowerCase())) {
-                res.setHeader(n, v);
-            }
-        });
-        res.status(response.status).send(bufferToClient);
-        
-        logTraffic(req.method, req.path, response.status, startTime, parsedReqLog, parsedResLog);
-
-    } catch (e) {
-        if (!res.headersSent) res.status(502).send("GATEWAY ERROR");
-        logTraffic(req.method, req.path, 502, startTime, parsedReqLog, "[API ERROR] " + e.message);
-    }
+// Root endpoint to verify server is running (Fixes the 403 error)
+app.get('/', (req, res) => {
+    res.send("<h1 style='font-family:sans-serif; text-align:center; margin-top:50px;'>Server is Running! 🚀<br><a href='/romeo/ds'>Go to Dashboard</a></h1>");
 });
-
-// ==========================================
-// 📊 5. LOGGING & DASHBOARD
-// ==========================================
-function logTraffic(method, path, status, startTime, reqData, resData) {
-    requestLogs.unshift({
-        id: Date.now() + '-' + Math.floor(Math.random() * 1000),
-        method, path, status,
-        duration: `${Date.now() - startTime}ms`,
-        req: reqData, res: resData
-    });
-    if (requestLogs.length > 50) requestLogs.pop();
-}
 
 app.get('/api/internal/logs', (req, res) => res.json(requestLogs));
 app.post('/api/internal/clear', (req, res) => { requestLogs = []; res.json({ success: true }); });
 
+// 🌌 THE KING AURORA DASHBOARD
 app.get('/romeo/ds', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -283,6 +185,91 @@ app.get('/romeo/ds', (req, res) => {
     </body>
     </html>
     `);
+});
+
+// ==========================================
+// 🌌 5. CATCH-ALL PROXY INTERCEPTOR (MUST BE LAST)
+// ==========================================
+app.all('*', async (req, res) => {
+    const startTime = Date.now();
+    let reqBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    let parsedReqLog = "[RAW BINARY]";
+    let parsedResLog = "[RAW BINARY]";
+    let bufferToForward = reqBuffer;
+
+    // --- CHECK LOCAL BYPASS ---
+    const localRule = Object.keys(LOCAL_RESPONSES).find(p => req.originalUrl.includes(p));
+    if (localRule) {
+        const mock = LOCAL_RESPONSES[localRule];
+        res.setHeader('Content-Type', mock.type);
+        res.status(mock.status).send(mock.data);
+        logTraffic(req.method, req.originalUrl, mock.status, startTime, "LOCAL BYPASS", "SUCCESS");
+        return;
+    }
+
+    // --- INTERCEPT REQUEST ---
+    if (reqBuffer.length > 0 && req.path.includes('MajorLogin')) {
+        const decryptedReq = decryptData(reqBuffer);
+        if (decryptedReq && MajorLoginReq) {
+            try {
+                const msg = MajorLoginReq.decode(decryptedReq);
+                const jsonReq = MajorLoginReq.toObject(msg, { defaults: true, bytes: String });
+                parsedReqLog = JSON.stringify(jsonReq, null, 2);
+                // Note: Forwarding original buffer without modifcation for now
+            } catch(e) { parsedReqLog = "[REQ PROTO DECODE ERROR] " + e.message; }
+        } else {
+            parsedReqLog = "[DECRYPTION FAILED] AES Keys did not match.";
+        }
+    }
+
+    // --- FORWARD TO GARENA ---
+    try {
+        let pathUrl = req.originalUrl.replace(/^\//, ''); 
+        const targetUrl = `${GARENA_API}/${pathUrl}`;
+
+        const headers = { ...req.headers };
+        delete headers.host;
+        delete headers['accept-encoding']; 
+        headers['x-forwarded-for'] = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+        const response = await fetch(targetUrl, {
+            method: req.method,
+            headers: headers,
+            body: bufferToForward.length > 0 ? bufferToForward : undefined
+        });
+
+        let resBuffer = Buffer.from(await response.arrayBuffer());
+        let bufferToClient = resBuffer;
+
+        // --- INTERCEPT RESPONSE ---
+        if (resBuffer.length > 0 && req.path.includes('MajorLogin')) {
+            const decryptedRes = decryptData(resBuffer);
+            if (decryptedRes && MajorLoginRes) {
+                try {
+                    const msgRes = MajorLoginRes.decode(decryptedRes);
+                    const jsonRes = MajorLoginRes.toObject(msgRes, { defaults: true, bytes: String });
+                    parsedResLog = JSON.stringify(jsonRes, null, 2);
+                } catch(e) { parsedResLog = "[RES PROTO DECODE ERROR] " + e.message; }
+            } else {
+                parsedResLog = "[RES DECRYPTION FAILED] Different key used by server?";
+            }
+        } else if (resBuffer.length > 0) {
+            parsedResLog = `[ENCRYPTED] Size: ${resBuffer.length} bytes`;
+        }
+
+        response.headers.forEach((v, n) => {
+            if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(n.toLowerCase())) {
+                res.setHeader(n, v);
+            }
+        });
+        res.status(response.status).send(bufferToClient);
+        
+        logTraffic(req.method, req.originalUrl, response.status, startTime, parsedReqLog, parsedResLog);
+
+    } catch (e) {
+        if (!res.headersSent) res.status(502).send("GATEWAY ERROR");
+        logTraffic(req.method, req.originalUrl, 502, startTime, parsedReqLog, "[API ERROR] " + e.message);
+    }
 });
 
 app.listen(process.env.PORT || 3000);
