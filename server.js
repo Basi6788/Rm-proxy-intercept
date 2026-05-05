@@ -31,22 +31,28 @@ function decryptRequest(buffer) {
     try {
         const decipher = crypto.createDecipheriv(ALGO, AES_KEY, AES_IV);
         return Buffer.concat([decipher.update(buffer), decipher.final()]);
-    } catch (e) {
-        return null; // Key mismatch or padding error
-    }
+    } catch (e) { return null; }
 }
 
 function encryptRequest(buffer) {
     try {
         const cipher = crypto.createCipheriv(ALGO, AES_KEY, AES_IV);
         return Buffer.concat([cipher.update(buffer), cipher.final()]);
-    } catch (e) {
-        return null;
-    }
+    } catch (e) { return null; }
+}
+
+function logTraffic(method, path, status, startTime, reqData, resData) {
+    requestLogs.unshift({
+        id: Date.now() + '-' + Math.floor(Math.random() * 1000),
+        method, path, status,
+        duration: `${Date.now() - startTime}ms`,
+        req: reqData, res: resData
+    });
+    if (requestLogs.length > 50) requestLogs.pop();
 }
 
 // ==========================================
-// 🛡️ 3. LOCAL MOCKS (ver.php)
+// 🛡️ 3. LOCAL MOCKS (ver.php bypass)
 // ==========================================
 const LOCAL_RESPONSES = {
     "/ver.php": {
@@ -69,7 +75,7 @@ const LOCAL_RESPONSES = {
             "should_check_ab_load": false,
             "force_refresh_restype": "optionalavatarres",
             "remote_version": "2.124.10",
-            "server_url": "https://rm-proxy-intercept.vercel.app/", // TERA VERCEL LINK
+            "server_url": "https://rm-proxy-intercept.vercel.app/", 
             "is_review_server": false,
             "use_login_optional_download": true,
             "use_background_download": true,
@@ -77,7 +83,7 @@ const LOCAL_RESPONSES = {
             "country_code": "SG",
             "client_ip": "15.235.211.216",
             "gdpr_version": 0,
-            "billboard_msg": "👑 KING AURORA: MITM ACTIVE",
+            "billboard_msg": "👑 KING AURORA: MITM PROXY ONLINE",
             "core_url": "csoversea.castle.freefiremobile.com",
             "core_ip_list": ["0.0.0.0", "50.109.27.134", "129.226.2.163"],
             "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefiremax",
@@ -88,110 +94,20 @@ const LOCAL_RESPONSES = {
 };
 
 // ==========================================
-// 🚀 4. THE CORE PROXY INTERCEPTOR
+// 🚀 4. API & DASHBOARD ROUTES (Fixed Order!)
 // ==========================================
-app.all('*', async (req, res) => {
-    if (req.path === '/romeo/ds' || req.path.startsWith('/api/internal') || req.path === '/favicon.ico') return;
 
-    const startTime = Date.now();
-    let reqBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-    let parsedReqLog = "[RAW BINARY]";
-    let parsedResLog = "[RAW BINARY]";
-    let bufferToForward = reqBuffer;
-
-    // --- 1. LOCAL BYPASS ---
-    const localRule = Object.keys(LOCAL_RESPONSES).find(p => req.originalUrl.includes(p));
-    if (localRule) {
-        const mock = LOCAL_RESPONSES[localRule];
-        res.setHeader('Content-Type', mock.type);
-        res.status(mock.status).send(mock.data);
-        logTraffic(req.method, req.path, mock.status, startTime, "LOCAL BYPASS", "SUCCESS");
-        return;
-    }
-
-    // --- 2. INTERCEPT & DECRYPT REQUEST ---
-    if (reqBuffer.length > 0 && req.path.includes('MajorLogin')) {
-        const decryptedReq = decryptRequest(reqBuffer);
-        if (decryptedReq && MajorLoginReq) {
-            try {
-                const msg = MajorLoginReq.decode(decryptedReq);
-                parsedReqLog = JSON.stringify(MajorLoginReq.toObject(msg, { defaults: true, bytes: String }), null, 2);
-            } catch(e) { parsedReqLog = "[REQ PROTO DECODE ERROR] " + e.message; }
-        } else {
-            parsedReqLog = "[REQ DECRYPTION FAILED] Invalid AES Key or Padding.";
-        }
-    }
-
-    // --- 3. FORWARD TO GARENA ---
-    try {
-        let pathUrl = req.originalUrl.replace(/^\//, ''); 
-        const targetUrl = `${GARENA_API}/${pathUrl}`;
-
-        const headers = { ...req.headers };
-        delete headers.host;
-        delete headers['accept-encoding']; 
-        headers['x-forwarded-for'] = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-
-        const response = await fetch(targetUrl, {
-            method: req.method,
-            headers: headers,
-            body: bufferToForward.length > 0 ? bufferToForward : undefined
-        });
-
-        let resBuffer = Buffer.from(await response.arrayBuffer());
-
-        // --- 4. INTERCEPT RESPONSE (DIRECT PROTOBUF DECODE) ---
-        if (resBuffer.length > 0 && req.path.includes('MajorLogin')) {
-            // Python script clearly says: Response is plain protobuf (no decryption)
-            if (MajorLoginRes) {
-                try {
-                    const msgRes = MajorLoginRes.decode(resBuffer);
-                    parsedResLog = JSON.stringify(MajorLoginRes.toObject(msgRes, { defaults: true, bytes: String }), null, 2);
-                } catch(e) { 
-                    parsedResLog = "[RES PROTO DECODE ERROR] " + e.message; 
-                }
-            } else {
-                parsedResLog = "[RES DECODE FAILED] MajorLoginRes.proto not loaded.";
-            }
-        } else if (resBuffer.length > 0) {
-            parsedResLog = `[BINARY] Size: ${resBuffer.length} bytes`;
-        }
-
-        // --- 5. SEND BACK TO GAME ---
-        response.headers.forEach((v, n) => {
-            if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(n.toLowerCase())) {
-                res.setHeader(n, v);
-            }
-        });
-        res.status(response.status).send(resBuffer);
-        
-        logTraffic(req.method, req.path, response.status, startTime, parsedReqLog, parsedResLog);
-
-    } catch (e) {
-        if (!res.headersSent) res.status(502).send("GATEWAY ERROR");
-        logTraffic(req.method, req.path, 502, startTime, parsedReqLog, "[API ERROR] " + e.message);
-    }
+// Root Route (Fixes 403 Forbidden)
+app.get('/', (req, res) => {
+    res.send("<h1 style='font-family:sans-serif; text-align:center; margin-top:50px; color:#333;'>Vercel Server Active 🚀<br><br><a href='/romeo/ds' style='color:#8b5cf6;'>Enter Dashboard</a></h1>");
 });
 
-// ==========================================
-// 📊 5. LOGGING & DASHBOARD
-// ==========================================
-function logTraffic(method, path, status, startTime, reqData, resData) {
-    requestLogs.unshift({
-        id: Date.now() + '-' + Math.floor(Math.random() * 1000),
-        method, path, status,
-        duration: `${Date.now() - startTime}ms`,
-        req: reqData, res: resData
-    });
-    if (requestLogs.length > 50) requestLogs.pop();
-}
-
+// Internal API Routes
 app.get('/api/internal/logs', (req, res) => res.json(requestLogs));
 app.post('/api/internal/clear', (req, res) => { requestLogs = []; res.json({ success: true }); });
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// Root endpoint to prevent 403
-app.get('/', (req, res) => res.redirect('/romeo/ds'));
-
+// The Dashboard
 app.get('/romeo/ds', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -214,7 +130,7 @@ app.get('/romeo/ds', (req, res) => {
     </head>
     <body class="min-h-screen p-3 sm:p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-[#030008] to-black">
         <div class="max-w-7xl mx-auto">
-            <header class="flex justify-between items-center pb-4 mb-6 border-b border-purple-500/20">
+            <header class="flex flex-col sm:flex-row justify-between items-center pb-4 mb-6 border-b border-purple-500/20 gap-4">
                 <div class="flex items-center gap-4">
                     <button class="p-2 bg-purple-900/30 rounded-full border border-purple-500/50">
                         <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
@@ -224,13 +140,40 @@ app.get('/romeo/ds', (req, res) => {
                         <p class="text-[10px] text-purple-400/70 font-bold uppercase tracking-[0.3em] mt-1">Full MITM Engine Active</p>
                     </div>
                 </div>
-                <button onclick="clearLogs()" class="px-4 py-2 bg-black text-red-500 border border-red-500/50 hover:bg-red-950 transition-all text-[10px] font-black rounded-full tracking-widest">CLEAR LOGS</button>
+                <div class="flex gap-2">
+                    <button onclick="copyAllLogs(this)" class="px-4 py-2 bg-purple-900/30 text-purple-300 border border-purple-500/50 hover:bg-purple-600 hover:text-white transition-all text-[10px] font-black rounded-full tracking-widest aurora-glow">COPY ALL DATA</button>
+                    <button onclick="clearLogs()" class="px-4 py-2 bg-black text-red-500 border border-red-500/50 hover:bg-red-950 transition-all text-[10px] font-black rounded-full tracking-widest">CLEAR LOGS</button>
+                </div>
             </header>
             <div id="logs-container" class="space-y-5"></div>
         </div>
         <script>
             let localLogs = [];
-            async function clearLogs() { await fetch('/api/internal/clear', { method: 'POST' }); localLogs = []; render(); }
+            
+            async function clearLogs() { 
+                await fetch('/api/internal/clear', { method: 'POST' }); 
+                localLogs = []; 
+                render(); 
+            }
+
+            function copyAllLogs(btn) {
+                if(localLogs.length === 0) return;
+                const exportData = JSON.stringify(localLogs, null, 2);
+                navigator.clipboard.writeText(exportData).then(() => {
+                    const orig = btn.innerHTML;
+                    btn.innerHTML = '✅ COPIED!';
+                    btn.classList.replace('text-purple-300', 'text-white');
+                    btn.classList.add('bg-green-600');
+                    btn.classList.remove('bg-purple-900/30', 'aurora-glow');
+                    setTimeout(() => {
+                        btn.innerHTML = orig;
+                        btn.classList.replace('text-white', 'text-purple-300');
+                        btn.classList.remove('bg-green-600');
+                        btn.classList.add('bg-purple-900/30', 'aurora-glow');
+                    }, 2000);
+                });
+            }
+
             function render() {
                 const container = document.getElementById('logs-container');
                 let html = '';
@@ -249,11 +192,11 @@ app.get('/romeo/ds', (req, res) => {
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <div class="relative">
                                 <div class="absolute -top-2.5 left-3 bg-[#0a0a0a] text-gray-400 text-[8px] font-black px-2 py-0.5 rounded-full border border-gray-700 tracking-widest">REQUEST</div>
-                                <div class="p-3 bg-black/80 rounded-lg border border-white/5 h-48 overflow-y-auto"><pre class="text-purple-400/90">\${log.req}</pre></div>
+                                <div class="p-3 bg-black/80 rounded-lg border border-white/5 h-48 overflow-y-auto custom-scroll"><pre class="text-purple-400/90">\${log.req}</pre></div>
                             </div>
                             <div class="relative">
                                 <div class="absolute -top-2.5 left-3 bg-[#0a0a0a] text-gray-400 text-[8px] font-black px-2 py-0.5 rounded-full border border-gray-700 tracking-widest">RESPONSE</div>
-                                <div class="p-3 bg-black/80 rounded-lg border border-white/5 h-48 overflow-y-auto"><pre class="\${isError ? 'text-red-400/80' : 'text-gray-400/80'}">\${log.res}</pre></div>
+                                <div class="p-3 bg-black/80 rounded-lg border border-white/5 h-48 overflow-y-auto custom-scroll"><pre class="\${isError ? 'text-red-400/80' : 'text-gray-400/80'}">\${log.res}</pre></div>
                             </div>
                         </div>
                     </div>\`;
@@ -271,6 +214,90 @@ app.get('/romeo/ds', (req, res) => {
     </body>
     </html>
     `);
+});
+
+// ==========================================
+// 🌌 5. CATCH-ALL PROXY INTERCEPTOR (MUST BE LAST)
+// ==========================================
+app.all('*', async (req, res) => {
+    const startTime = Date.now();
+    let reqBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    let parsedReqLog = "[RAW BINARY]";
+    let parsedResLog = "[RAW BINARY]";
+    let bufferToForward = reqBuffer;
+
+    // --- CHECK LOCAL BYPASS ---
+    const localRule = Object.keys(LOCAL_RESPONSES).find(p => req.originalUrl.includes(p));
+    if (localRule) {
+        const mock = LOCAL_RESPONSES[localRule];
+        res.setHeader('Content-Type', mock.type);
+        res.status(mock.status).send(mock.data);
+        logTraffic(req.method, req.originalUrl, mock.status, startTime, "LOCAL BYPASS", "SUCCESS");
+        return;
+    }
+
+    // --- INTERCEPT REQUEST ---
+    if (reqBuffer.length > 0 && req.path.includes('MajorLogin')) {
+        const decryptedReq = decryptRequest(reqBuffer);
+        if (decryptedReq && MajorLoginReq) {
+            try {
+                const msg = MajorLoginReq.decode(decryptedReq);
+                const jsonReq = MajorLoginReq.toObject(msg, { defaults: true, bytes: String });
+                parsedReqLog = JSON.stringify(jsonReq, null, 2);
+            } catch(e) { parsedReqLog = "[REQ PROTO DECODE ERROR] " + e.message; }
+        } else {
+            parsedReqLog = "[DECRYPTION FAILED] AES Keys did not match.";
+        }
+    }
+
+    // --- FORWARD TO GARENA ---
+    try {
+        let pathUrl = req.originalUrl.replace(/^\//, ''); 
+        const targetUrl = `${GARENA_API}/${pathUrl}`;
+
+        const headers = { ...req.headers };
+        delete headers.host;
+        delete headers['accept-encoding']; 
+        headers['x-forwarded-for'] = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+        const response = await fetch(targetUrl, {
+            method: req.method,
+            headers: headers,
+            body: bufferToForward.length > 0 ? bufferToForward : undefined
+        });
+
+        let resBuffer = Buffer.from(await response.arrayBuffer());
+        let bufferToClient = resBuffer;
+
+        // --- INTERCEPT RESPONSE ---
+        if (resBuffer.length > 0 && req.path.includes('MajorLogin')) {
+            // According to python script, response is plain protobuf for major login
+            if (MajorLoginRes) {
+                try {
+                    const msgRes = MajorLoginRes.decode(resBuffer);
+                    const jsonRes = MajorLoginRes.toObject(msgRes, { defaults: true, bytes: String });
+                    parsedResLog = JSON.stringify(jsonRes, null, 2);
+                } catch(e) { parsedResLog = "[RES PROTO DECODE ERROR] " + e.message; }
+            } else {
+                parsedResLog = "[RES DECODE FAILED] Proto missing.";
+            }
+        } else if (resBuffer.length > 0) {
+            parsedResLog = `[BINARY ENCRYPTED] Size: ${resBuffer.length} bytes`;
+        }
+
+        response.headers.forEach((v, n) => {
+            if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(n.toLowerCase())) {
+                res.setHeader(n, v);
+            }
+        });
+        res.status(response.status).send(bufferToClient);
+        
+        logTraffic(req.method, req.originalUrl, response.status, startTime, parsedReqLog, parsedResLog);
+
+    } catch (e) {
+        if (!res.headersSent) res.status(502).send("GATEWAY ERROR");
+        logTraffic(req.method, req.originalUrl, 502, startTime, parsedReqLog, "[API ERROR] " + e.message);
+    }
 });
 
 app.listen(process.env.PORT || 3000);
