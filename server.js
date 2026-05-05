@@ -74,7 +74,10 @@ const LOCAL_RESPONSES = {
             "space_required_in_GB": 1.48,
             "should_check_ab_load": false,
             "force_refresh_restype": "optionalavatarres",
-            "remote_version": "2.124.10",
+            
+            // 🔥 FIXED: Official APK Version
+            "remote_version": "1.123.10", 
+            
             "server_url": "https://rm-proxy-intercept.vercel.app/", 
             "is_review_server": false,
             "use_login_optional_download": true,
@@ -83,10 +86,10 @@ const LOCAL_RESPONSES = {
             "country_code": "SG",
             "client_ip": "15.235.211.216",
             "gdpr_version": 0,
-            "billboard_msg": "👑 KING AURORA: MITM PROXY ONLINE",
+            "billboard_msg": "👑 KING AURORA: OFFICIAL APK BYPASSED",
             "core_url": "csoversea.castle.freefiremobile.com",
             "core_ip_list": ["0.0.0.0", "50.109.27.134", "129.226.2.163"],
-            "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefiremax",
+            "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefireth",
             "garena_login": false,
             "garena_hint": false
         }))
@@ -94,7 +97,7 @@ const LOCAL_RESPONSES = {
 };
 
 // ==========================================
-// 🚀 4. API & DASHBOARD ROUTES (Fixed Order!)
+// 🚀 4. API & DASHBOARD ROUTES
 // ==========================================
 
 // Root Route (Fixes 403 Forbidden)
@@ -271,7 +274,6 @@ app.all('*', async (req, res) => {
 
         // --- INTERCEPT RESPONSE ---
         if (resBuffer.length > 0 && req.path.includes('MajorLogin')) {
-            // According to python script, response is plain protobuf for major login
             if (MajorLoginRes) {
                 try {
                     const msgRes = MajorLoginRes.decode(resBuffer);
