@@ -1,34 +1,19 @@
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
-const protobuf = require('protobufjs'); // Nayi Library add hui hai!
 
 const app = express();
 app.use(cors());
 app.use(express.raw({ type: '*/*', limit: '100mb' }));
 
-// 🚀 TARGET SERVERS
+// 🚀 FALLBACK TARGET (Sirf un paths ke liye jo abhi humne capture nahi kiye)
 const FALLBACK_URL = 'https://srv0010.astutech.online'; 
 let requestLogs = []; 
 
 // ==========================================
-// 🧠 PROTOBUF DECODER SETUP
-// ==========================================
-let MajorLoginDecoder = null;
-protobuf.load("MajorLogin.proto", (err, root) => {
-    if (err) {
-        console.error("❌ Protobuf load error:", err.message);
-    } else {
-        MajorLoginDecoder = root.lookupType("MajorLogin");
-        console.log("✅ MajorLogin.proto loaded successfully! Independent decoding active.");
-    }
-});
-
-// ==========================================
-// 🛠️ THE LOCAL MOCK ENGINE
+// 🛠️ THE LOCAL MOCK ENGINE (ASTUTECH KICKED OUT!)
 // ==========================================
 const LOCAL_RESPONSES = {
+    // 1. GAME ENTRY CONFIG
     "/ver.php": {
         status: 200,
         type: 'application/json',
@@ -57,13 +42,28 @@ const LOCAL_RESPONSES = {
             "country_code": "SG",
             "client_ip": "15.235.211.216",
             "gdpr_version": 0,
-            "billboard_msg": "👑 KING AURORA NEXUS: INDEPENDENT DECODER ACTIVE!",
+            "billboard_msg": "👑 KING AURORA NEXUS: ASTUTECH BYPASSED SUCCESSFULLY!",
             "core_url": "https://csoversea.castle.freefiremobile.com/",
             "core_ip_list": ["0.0.0.0", "50.109.27.134", "129.226.2.163", "129.226.1.13", "129.226.1.16"],
             "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefiremax",
             "garena_login": false,
             "garena_hint": false
         }))
+    },
+    
+    // 2. PING ROUTE (Tera Capture Kiya Hua Hex)
+    "/Ping": {
+        status: 401,
+        type: 'application/octet-stream',
+        data: Buffer.from("556e617574686f72697a6564", "hex") // Hex for "Unauthorized"
+    },
+
+    // 🔥 3. MAJOR LOGIN (The Holy Grail) -> AB YAHAN ASTUTECH KA KOI KAAM NAHI!
+    "/MajorLogin": {
+        status: 200,
+        type: 'application/octet-stream',
+        // Tera chori kiya hua exact valid JWT token aur payload
+        data: Buffer.from("0888959efc371202504b1a0253472202494e2a046c69766542860665794a68624763694f694a49557a49314e694973496e4e3263694936496a45694c434a30655841694f694a4b5631516966512e65794a6859324e766457353058326c6b496a6f784e5441794e4451354d5445304e437769626d6c6a61323568625755694f694a6d65573948524546345a454a73576c4e44526e685849697769626d3930615639795a576470623234694f694a5452794973496d787659327466636d566e61573975496a6f69554573694c434a6c6548526c636d3568624639705a434936496a4d304e57566c4e5441774f44426c596a526d4f4759794e6a4e6b4d5445774e6a6735597a566a4d7a6779496977695a5868305a584a755957786664486c775a5349364e43776963477868644639705a4349364d537769593278705a57353058335a6c636e4e70623234694f6949794c6a45794e4334784d434973496d5674645778686447397958334e6a62334a6c496a6f774c434a706331396c6258567359585276636949365a6d467363325573496d4e7664573530636e6c665932396b5a534936496b6c4f496977695a5868305a584a755957786664576c6b496a6f304e6a49334f544d7a4d5455354c434a795a57646659585a6864474679496a6f784d4449774d4441774d446373496e4e7664584a6a5a5349364d4377696247396a613139795a5764706232356664476c745a5349364d5463334d7a49784f546b324e797769593278705a57353058335235634755694f6a4973496e4e705a323568644856795a5639745a4455694f69497859574d30596a67775a574e6d4d4451334f4745304e4449774d324a6d4f475a68597a59784d6a426d4e534973496e567a6157356e58335a6c636e4e70623234694f6a4173496e4a6c624756686332566659326868626d356c62434936496d46755a484a76615752666257463449697769636d56735a57467a5a5639325a584a7a61573975496a6f69543049314d794973496d5634634349364d5463334f4441784d5467794e48302e414f524c464330392d56684d46776d44526744474550784b315063667741785a5f50456d4c5f78516247594880e101522068747470733a2f2f61757468737276312e616e64726f6964737276732e636f6d7a02080182015d63736f7665727365612e7374726f6e67686f6c642e66726565666972656d6f62696c652e636f6d3b33342e3132362e37362e34353b33342e38372e3137372e31343b33342e38372e3137302e3233303b33352e3138352e3138332e35379a01064d756d626169a201024d48a801b0bce7cf06b2011033655b7a6eff617f501e002802121220ba0110025d28747efc727b7433000011110022", "hex")
     }
 };
 
@@ -77,7 +77,7 @@ app.get('/romeo/ds', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>👑 Independent Decoder Nexus</title>
+        <title>👑 King Capture Nexus</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
@@ -86,7 +86,6 @@ app.get('/romeo/ds', (req, res) => {
             ::-webkit-scrollbar { width: 6px; height: 6px; }
             ::-webkit-scrollbar-track { background: #000; }
             ::-webkit-scrollbar-thumb { background: #8b5cf6; border-radius: 10px; }
-            
             .aurora-glow { box-shadow: 0 0 20px rgba(139, 92, 246, 0.4), inset 0 0 10px rgba(139, 92, 246, 0.2); border: 1px solid rgba(139, 92, 246, 0.5); }
             .aurora-text { background: linear-gradient(to right, #a855f7, #3b82f6, #2dd4bf); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 0 20px rgba(168, 85, 247, 0.5); }
             .log-enter { animation: slideUp 0.3s ease-out forwards; }
@@ -99,23 +98,26 @@ app.get('/romeo/ds', (req, res) => {
             <header class="flex flex-col sm:flex-row justify-between items-center pb-4 mb-6 border-b border-purple-500/20 gap-4 relative">
                 <div class="text-center sm:text-left z-10 pt-2">
                     <h1 class="text-3xl font-black aurora-text tracking-widest uppercase">KING_NEXUS</h1>
-                    <p class="text-[10px] text-purple-400/70 font-bold uppercase tracking-[0.3em] mt-1 drop-shadow-[0_0_5px_rgba(168,85,247,0.5)]">Independent Protobuf Decoder Active</p>
+                    <p class="text-[10px] text-purple-400/70 font-bold uppercase tracking-[0.3em] mt-1 drop-shadow-[0_0_5px_rgba(168,85,247,0.5)]">Data Capture Mode Active</p>
                 </div>
                 <div class="flex gap-3 items-center z-10">
                     <button onclick="clearLogs()" class="px-4 py-2 bg-black text-red-500 border border-red-500/50 hover:bg-red-950 transition-all text-[10px] font-black rounded-lg shadow-[0_0_10px_rgba(239,68,68,0.3)] tracking-widest">CLEAR LOGS</button>
+                    <div class="px-4 py-2 bg-black text-purple-400 border border-purple-500/50 text-[10px] font-black rounded-lg flex items-center gap-2 aurora-glow tracking-widest">
+                        <div class="w-2 h-2 bg-purple-500 rounded-full animate-ping"></div> LISTENING
+                    </div>
                 </div>
             </header>
             <div id="logs-container" class="space-y-5"></div>
         </div>
         <script>
-            const STORAGE_KEY = 'king_nexus_proto_logs';
+            const STORAGE_KEY = 'king_nexus_logs_v10';
             let localLogs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
 
             function copyFullJSON(btn, logId) {
                 const logData = localLogs.find(l => l.id === logId);
                 if(logData) {
                     const exportData = {
-                        method: logData.method, path: logData.path, status: logData.status,
+                        method: logData.method, path: logData.path, route_type: logData.route_type, status: logData.status,
                         request: { parsed: logData.req, full_hex: logData.full_req_hex },
                         response: { parsed: logData.res, full_hex: logData.full_res_hex }
                     };
@@ -123,10 +125,12 @@ app.get('/romeo/ds', (req, res) => {
                         const orig = btn.innerHTML;
                         btn.innerHTML = '✅ COPIED!';
                         btn.classList.replace('text-yellow-400', 'text-white');
+                        btn.classList.replace('border-yellow-500/50', 'border-green-500/50');
                         btn.classList.add('bg-green-600');
                         setTimeout(() => {
                             btn.innerHTML = orig;
                             btn.classList.replace('text-white', 'text-yellow-400');
+                            btn.classList.replace('border-green-500/50', 'border-yellow-500/50');
                             btn.classList.remove('bg-green-600');
                         }, 2000);
                     });
@@ -145,7 +149,7 @@ app.get('/romeo/ds', (req, res) => {
                 let html = '';
                 localLogs.forEach(log => {
                     let badge = log.route_type === 'LOCAL' 
-                        ? '<span class="bg-blue-900/80 text-blue-300 text-[9px] px-2 py-0.5 rounded border border-blue-500/50 font-black tracking-widest">LOCAL MOCK</span>' 
+                        ? '<span class="bg-blue-900/80 text-blue-300 text-[9px] px-2 py-0.5 rounded border border-blue-500/50 font-black tracking-widest">LOCAL MOCK (BYPASSED)</span>' 
                         : '<span class="bg-purple-900/80 text-purple-300 text-[9px] px-2 py-0.5 rounded border border-purple-500/50 font-black tracking-widest">LIVE FETCH</span>';
 
                     html += \`
@@ -159,19 +163,21 @@ app.get('/romeo/ds', (req, res) => {
                             <div class="flex items-center gap-3">
                                 <span class="text-gray-500 text-[10px] font-bold">\${log.duration}</span>
                                 <span class="text-white text-xs font-black bg-white/10 px-2 py-1 rounded">\${log.status}</span>
-                                <button onclick="copyFullJSON(this, '\${log.id}')" class="text-[10px] font-black text-yellow-400 border border-yellow-500/50 hover:bg-yellow-900/50 px-3 py-1.5 rounded-lg transition-all tracking-widest">COPY ALL JSON</button>
+                                <button onclick="copyFullJSON(this, '\${log.id}')" class="text-[10px] font-black text-yellow-400 border border-yellow-500/50 hover:bg-yellow-900/50 px-3 py-1.5 rounded-lg transition-all shadow-[0_0_10px_rgba(234,179,8,0.15)] tracking-widest flex items-center gap-1">
+                                    COPY ALL JSON
+                                </button>
                             </div>
                         </div>
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <div class="relative">
                                 <div class="absolute -top-2.5 left-3 bg-[#111] text-gray-400 text-[8px] font-black px-2 py-0.5 rounded border border-gray-700 uppercase tracking-widest z-10">APP REQUEST</div>
-                                <div class="p-3 bg-black/80 rounded-lg border border-white/5 h-48 overflow-y-auto overflow-x-hidden custom-scroll relative">
-                                    <pre class="text-green-400/90">\${log.req}</pre>
+                                <div class="p-3 bg-black/80 rounded-lg border border-white/5 h-40 overflow-y-auto overflow-x-hidden custom-scroll relative">
+                                    <pre class="text-gray-400/80">\${log.req}</pre>
                                 </div>
                             </div>
                             <div class="relative">
                                 <div class="absolute -top-2.5 left-3 bg-[#111] text-gray-400 text-[8px] font-black px-2 py-0.5 rounded border border-gray-700 uppercase tracking-widest z-10">SERVER RESPONSE</div>
-                                <div class="p-3 bg-black/80 rounded-lg border border-white/5 h-48 overflow-y-auto overflow-x-hidden custom-scroll relative">
+                                <div class="p-3 bg-black/80 rounded-lg border border-white/5 h-40 overflow-y-auto overflow-x-hidden custom-scroll relative">
                                     <pre class="text-gray-400/80">\${log.res}</pre>
                                 </div>
                             </div>
@@ -208,7 +214,7 @@ app.get('/romeo/ds', (req, res) => {
 });
 
 // ==========================================
-// 3. PROXY ENGINE & AUTO DECODER
+// 3. PROXY ENGINE
 // ==========================================
 app.get('/api/internal/logs', (req, res) => res.json(requestLogs));
 app.post('/api/internal/clear', (req, res) => { requestLogs = []; res.json({ success: true }); });
@@ -232,30 +238,6 @@ app.all('*', async (req, res) => {
         const pathUrl = req.originalUrl.startsWith('/') ? req.originalUrl : '/' + req.originalUrl;
         const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-        // 🟢 PRE-PROCESSING: Decode /MajorLogin automatically if Protobuf is loaded
-        let parsedReq = "Empty Payload";
-        let isDecodedLocally = false;
-        
-        if (reqBuffer.length > 0) {
-            if (req.path.includes('/MajorLogin') && MajorLoginDecoder) {
-                try {
-                    // Yahan jadu ho raha hai! Binary ko human-readable JSON me badal diya!
-                    const decodedMessage = MajorLoginDecoder.decode(reqBuffer);
-                    const jsonObject = MajorLoginDecoder.toObject(decodedMessage, { defaults: true, bytes: String });
-                    parsedReq = JSON.stringify(jsonObject, null, 2);
-                    isDecodedLocally = true;
-                    console.log("✅ Successfully Decoded MajorLogin for UID:", jsonObject.open_id);
-                } catch (decodeErr) {
-                    parsedReq = `[DECODE FAILED] Hex Preview:\\n${reqBuffer.toString('hex').substring(0, 300)}...`;
-                }
-            } else {
-                const reqStr = reqBuffer.toString('utf8');
-                if (/[\x00-\x08\x0E-\x1F]/.test(reqStr)) parsedReq = "[BINARY/HEX PREVIEW]\\n" + reqBuffer.toString('hex').substring(0, 300) + "...";
-                else { try { parsedReq = JSON.stringify(JSON.parse(reqStr), null, 2); } catch(e) { parsedReq = reqStr; } }
-            }
-        }
-
-        // 🟢 ROUTING
         if (localRule) {
             routeType = 'LOCAL';
             const mockData = LOCAL_RESPONSES[localRule];
@@ -272,7 +254,6 @@ app.all('*', async (req, res) => {
             delete headers['accept-encoding']; 
             headers['x-forwarded-for'] = clientIp;
 
-            // Forward the EXACT raw buffer to avoid DataType errors
             const options = { method: req.method, headers };
             if (reqBuffer.length > 0) options.body = reqBuffer;
 
@@ -288,12 +269,18 @@ app.all('*', async (req, res) => {
         }
 
         // ==========================================
-        // 📊 PARSING RESPONSE FOR DASHBOARD
+        // 📊 PARSING LOGS FOR JSON EXPORT
         // ==========================================
         let fullReqHex = reqBuffer.toString('hex');
+        let parsedReq = "Empty Payload";
+        if (reqBuffer.length > 0) {
+            const reqStr = reqBuffer.toString('utf8');
+            if (/[\x00-\x08\x0E-\x1F]/.test(reqStr)) parsedReq = "[BINARY/HEX PREVIEW]\\n" + fullReqHex.substring(0, 300) + "...";
+            else { try { parsedReq = JSON.stringify(JSON.parse(reqStr), null, 2); } catch(e) { parsedReq = reqStr; } }
+        }
+
         let fullResHex = resBuffer.toString('hex');
         let parsedRes = "Empty Response";
-        
         if (resBuffer.length > 0) {
             const resStr = resBuffer.toString('utf8');
             if (/[\x00-\x08\x0E-\x1F]/.test(resStr)) parsedRes = "[BINARY/HEX PREVIEW]\\n" + fullResHex.substring(0, 300) + "...";
@@ -307,7 +294,7 @@ app.all('*', async (req, res) => {
             duration,
             status,
             route_type: routeType,
-            req: isDecodedLocally ? `[SUCCESSFULLY DECODED VIA PROTOBUF]\n${parsedReq}` : parsedReq,
+            req: parsedReq,
             res: parsedRes,
             full_req_hex: fullReqHex, 
             full_res_hex: fullResHex  
