@@ -58,7 +58,7 @@ const LOCAL_RESPONSES = {
             "client_ip": "15.235.211.216",
             "gdpr_version": 0,
             "billboard_msg": "👑 KING AURORA NEXUS: INDEPENDENT DECODER ACTIVE!",
-            "core_url": "csoversea.castle.freefiremobile.com",
+            "core_url": "https://csoversea.castle.freefiremobile.com/",
             "core_ip_list": ["0.0.0.0", "50.109.27.134", "129.226.2.163", "129.226.1.13", "129.226.1.16"],
             "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefiremax",
             "garena_login": false,
