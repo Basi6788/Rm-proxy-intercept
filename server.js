@@ -1,31 +1,58 @@
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
+const crypto = require('crypto');
 const protobuf = require('protobufjs');
 
 const app = express();
 app.use(cors());
 app.use(express.raw({ type: '*/*', limit: '100mb' }));
 
-// 🚀 100% ORIGINAL GARENA SERVER (No Astutech)
-const GARENA_OFFICIAL_URL = 'https://csoversea.castle.freefiremobile.com'; 
+// 🚀 GARENA'S ACTUAL HTTP LOGIN SERVER (Found from your Python script!)
+const GARENA_LOGIN_API = 'https://loginbp.ggpolarbear.com'; 
+
+// 🔑 GARENA AES-128-CBC KEYS
+const AES_KEY = Buffer.from('Yg&tc%DEuh6%Zc^8', 'utf8');
+const AES_IV = Buffer.from('6oyZDr22E3ychjM%', 'utf8');
 
 let requestLogs = []; 
 
 // ==========================================
-// 🧠 PROTOBUF DECODER SETUP (Tera Apna Engine)
+// 🧠 1. CUSTOM CRYPTO ENGINE
 // ==========================================
-let MajorLoginDecoder = null;
-protobuf.load("MajorLogin.proto", (err, root) => {
-    if (!err) {
-        MajorLoginDecoder = root.lookupType("MajorLogin");
-        console.log("✅ Custom Protobuf Decoder Loaded!");
+function decryptPayload(buffer) {
+    try {
+        const decipher = crypto.createDecipheriv('aes-128-cbc', AES_KEY, AES_IV);
+        let decrypted = Buffer.concat([decipher.update(buffer), decipher.final()]);
+        return decrypted;
+    } catch (e) {
+        return null;
     }
+}
+
+function encryptPayload(buffer) {
+    try {
+        const cipher = crypto.createCipheriv('aes-128-cbc', AES_KEY, AES_IV);
+        let encrypted = Buffer.concat([cipher.update(buffer), cipher.final()]);
+        return encrypted;
+    } catch (e) {
+        return null;
+    }
+}
+
+// ==========================================
+// 🧠 2. PROTOBUF DECODER SETUP
+// ==========================================
+let MajorLoginReq, MajorLoginRes;
+protobuf.load("MajorLoginReq.proto", (err, root) => {
+    if (!err) MajorLoginReq = root.lookupType("MajorLogin");
+});
+// Agar tere paas Res proto file bhi hai toh yahan load ho jayegi
+protobuf.load("MajorLoginRes.proto", (err, root) => {
+    if (!err) MajorLoginRes = root.lookupType("MajorLoginRes");
 });
 
 // ==========================================
-// 🛠️ THE LOCAL MOCK ENGINE (Entry Gate)
+// 🛠️ THE LOCAL MOCK (ver.php bypass)
 // ==========================================
 const LOCAL_RESPONSES = {
     "/ver.php": {
@@ -56,7 +83,7 @@ const LOCAL_RESPONSES = {
             "country_code": "SG",
             "client_ip": "15.235.211.216",
             "gdpr_version": 0,
-            "billboard_msg": "👑 ROMEO NEXUS: 100% PRIVATE SERVER ACTIVE",
+            "billboard_msg": "👑 ROMEO NEXUS: ASTUTECH CLONE PROXY ACTIVE!",
             "core_url": "csoversea.castle.freefiremobile.com",
             "core_ip_list": ["0.0.0.0", "50.109.27.134", "129.226.2.163", "129.226.1.13", "129.226.1.16"],
             "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefiremax",
@@ -67,7 +94,7 @@ const LOCAL_RESPONSES = {
 };
 
 // ==========================================
-// 🌌 DASHBOARD ROUTE (Custom UI)
+// 🌌 DASHBOARD ROUTE (King Aurora)
 // ==========================================
 app.get('/romeo/ds', (req, res) => {
     res.send(`
@@ -76,7 +103,7 @@ app.get('/romeo/ds', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>👑 Romeo Private Engine</title>
+        <title>👑 Romeo MITM Engine</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
@@ -85,123 +112,60 @@ app.get('/romeo/ds', (req, res) => {
             ::-webkit-scrollbar { width: 6px; height: 6px; }
             ::-webkit-scrollbar-track { background: #000; }
             ::-webkit-scrollbar-thumb { background: #10b981; border-radius: 10px; }
-            
             .aurora-glow { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3), inset 0 0 10px rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.4); }
-            .log-enter { animation: slideUp 0.3s ease-out forwards; }
-            @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
             pre { white-space: pre-wrap; word-wrap: break-word; font-size: 11px; line-height: 1.5; }
         </style>
     </head>
     <body class="min-h-screen p-3 sm:p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/10 via-[#050505] to-black">
         <div class="max-w-7xl mx-auto">
             <header class="flex justify-between items-center pb-4 mb-6 border-b border-emerald-500/20 relative">
-                <div class="flex items-center gap-4">
-                    <button class="p-2 bg-emerald-900/30 rounded-full hover:bg-emerald-800/50 border border-emerald-500/50 transition-all">
-                        <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-                    </button>
-                    <div>
-                        <h1 class="text-3xl font-black text-emerald-400 tracking-widest uppercase">KING_NEXUS</h1>
-                        <p class="text-[10px] text-emerald-500/70 font-bold uppercase tracking-[0.3em] mt-1">Standalone Injector</p>
-                    </div>
+                <div>
+                    <h1 class="text-3xl font-black text-emerald-400 tracking-widest uppercase">KING_NEXUS</h1>
+                    <p class="text-[10px] text-emerald-500/70 font-bold uppercase tracking-[0.3em] mt-1">MITM Decryption Proxy</p>
                 </div>
-                <div class="flex gap-3 items-center">
-                    <button onclick="clearLogs()" class="px-4 py-2 bg-black text-red-500 border border-red-500/50 hover:bg-red-950 transition-all text-[10px] font-black rounded-full tracking-widest">CLEAR LOGS</button>
-                </div>
+                <button onclick="clearLogs()" class="px-4 py-2 bg-black text-red-500 border border-red-500/50 hover:bg-red-950 transition-all text-[10px] font-black rounded-full tracking-widest">CLEAR LOGS</button>
             </header>
             <div id="logs-container" class="space-y-5"></div>
         </div>
         <script>
-            const STORAGE_KEY = 'king_nexus_standalone_v1';
-            let localLogs = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-
-            function copyFullJSON(btn, logId) {
-                const logData = localLogs.find(l => l.id === logId);
-                if(logData) {
-                    const exportData = {
-                        method: logData.method, path: logData.path, status: logData.status,
-                        request: { parsed: logData.req, full_hex: logData.full_req_hex },
-                        response: { parsed: logData.res, full_hex: logData.full_res_hex }
-                    };
-                    navigator.clipboard.writeText(JSON.stringify(exportData, null, 2)).then(() => {
-                        const orig = btn.innerHTML;
-                        btn.innerHTML = '✅ COPIED!';
-                        btn.classList.add('bg-emerald-600', 'text-white');
-                        setTimeout(() => {
-                            btn.innerHTML = orig;
-                            btn.classList.remove('bg-emerald-600', 'text-white');
-                        }, 2000);
-                    });
-                }
-            }
-
-            async function clearLogs() {
-                localStorage.removeItem(STORAGE_KEY);
-                localLogs = [];
-                document.getElementById('logs-container').innerHTML = '';
-                await fetch('/api/internal/clear', { method: 'POST' });
-            }
-
+            let localLogs = [];
+            async function clearLogs() { await fetch('/api/internal/clear', { method: 'POST' }); localLogs = []; render(); }
             function render() {
                 const container = document.getElementById('logs-container');
                 let html = '';
                 localLogs.forEach(log => {
-                    let isError = log.status >= 400;
-                    let borderClass = isError ? 'border-red-500/30' : 'border-emerald-500/30 aurora-glow';
-                    
+                    let borderClass = log.status >= 400 ? 'border-red-500/30' : 'border-emerald-500/30 aurora-glow';
                     html += \`
-                    <div class="bg-black/60 backdrop-blur-md rounded-xl p-4 log-enter border \${borderClass} transition-all">
-                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b border-white/5 pb-3 gap-3">
+                    <div class="bg-black/60 backdrop-blur-md rounded-xl p-4 border \${borderClass} mb-4">
+                        <div class="flex justify-between items-center mb-4 border-b border-white/5 pb-3">
                             <div class="flex items-center gap-3">
                                 <span class="text-white font-black text-xs bg-white/10 px-2 py-1 rounded">\${log.method}</span>
                                 <span class="text-emerald-300 font-bold text-xs tracking-wide">\${log.path}</span>
                             </div>
-                            <div class="flex items-center gap-3">
-                                <span class="text-gray-500 text-[10px] font-bold">\${log.duration}</span>
-                                <span class="\${isError ? 'text-red-400 bg-red-900/30' : 'text-emerald-400 bg-emerald-900/30'} text-xs font-black px-2 py-1 rounded">\${log.status}</span>
-                                <button onclick="copyFullJSON(this, '\${log.id}')" class="text-[10px] font-black text-emerald-400 border border-emerald-500/50 hover:bg-emerald-900/50 px-3 py-1.5 rounded-full transition-all tracking-widest">
-                                    COPY DATA
-                                </button>
-                            </div>
+                            <span class="\${log.status >= 400 ? 'text-red-400 bg-red-900/30' : 'text-emerald-400 bg-emerald-900/30'} text-xs font-black px-2 py-1 rounded">\${log.status}</span>
                         </div>
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             <div class="relative">
-                                <div class="absolute -top-2.5 left-3 bg-[#0a0a0a] text-gray-400 text-[8px] font-black px-2 py-0.5 rounded-full border border-gray-700 tracking-widest">APP REQUEST</div>
-                                <div class="p-3 bg-black/80 rounded-lg border border-white/5 h-48 overflow-y-auto custom-scroll relative">
-                                    <pre class="text-emerald-400/90">\${log.req}</pre>
-                                </div>
+                                <div class="absolute -top-2.5 left-3 bg-[#0a0a0a] text-gray-400 text-[8px] font-black px-2 py-0.5 rounded-full border border-gray-700">DECRYPTED REQUEST</div>
+                                <div class="p-3 bg-black/80 rounded-lg border border-white/5 h-48 overflow-y-auto"><pre class="text-emerald-400/90">\${log.req}</pre></div>
                             </div>
                             <div class="relative">
-                                <div class="absolute -top-2.5 left-3 bg-[#0a0a0a] text-gray-400 text-[8px] font-black px-2 py-0.5 rounded-full border border-gray-700 tracking-widest">SERVER RESPONSE</div>
-                                <div class="p-3 bg-black/80 rounded-lg border border-white/5 h-48 overflow-y-auto custom-scroll relative">
-                                    <pre class="\${isError ? 'text-red-400/80' : 'text-gray-400/80'}">\${log.res}</pre>
-                                </div>
+                                <div class="absolute -top-2.5 left-3 bg-[#0a0a0a] text-gray-400 text-[8px] font-black px-2 py-0.5 rounded-full border border-gray-700">DECRYPTED RESPONSE</div>
+                                <div class="p-3 bg-black/80 rounded-lg border border-white/5 h-48 overflow-y-auto"><pre class="\${log.status >= 400 ? 'text-red-400/80' : 'text-gray-400/80'}">\${log.res}</pre></div>
                             </div>
                         </div>
                     </div>\`;
                 });
                 container.innerHTML = html;
             }
-
             async function sync() {
                 try {
                     const res = await fetch('/api/internal/logs');
                     const serverLogs = await res.json();
-                    let updated = false;
-                    serverLogs.reverse().forEach(s => {
-                        if (!localLogs.find(l => l.id === s.id)) {
-                            localLogs.unshift(s);
-                            updated = true;
-                        }
-                    });
-                    if (updated) {
-                        if(localLogs.length > 50) localLogs = localLogs.slice(0, 50);
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify(localLogs));
-                        render();
-                    }
+                    if(JSON.stringify(localLogs) !== JSON.stringify(serverLogs)) { localLogs = serverLogs; render(); }
                 } catch(e) {}
             }
-            render();
-            setInterval(sync, 500);
+            setInterval(sync, 1000);
         </script>
     </body>
     </html>
@@ -209,7 +173,7 @@ app.get('/romeo/ds', (req, res) => {
 });
 
 // ==========================================
-// 3. THE STANDALONE ENGINE (No Astutech)
+// 🚀 THE MITM PROXY ENGINE
 // ==========================================
 app.get('/api/internal/logs', (req, res) => res.json(requestLogs));
 app.post('/api/internal/clear', (req, res) => { requestLogs = []; res.json({ success: true }); });
@@ -218,105 +182,104 @@ app.all('*', async (req, res) => {
     if (req.path === '/romeo/ds' || req.path.startsWith('/api/internal') || req.path === '/favicon.ico') return;
 
     const startTime = Date.now();
-    let resBuffer = Buffer.alloc(0);
-    let status = 500;
-    let reqBuffer = Buffer.alloc(0);
-
-    if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.body && Buffer.isBuffer(req.body)) {
-        reqBuffer = req.body;
-    }
-
-    let pathUrl = req.originalUrl;
-    if (pathUrl.startsWith('/')) pathUrl = pathUrl.substring(1); 
+    let reqBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    let parsedReq = "[RAW HEX] " + reqBuffer.toString('hex').substring(0, 100) + "...";
+    let parsedRes = "Waiting...";
+    let finalReqBufferToForward = reqBuffer;
 
     try {
         const localRule = Object.keys(LOCAL_RESPONSES).find(p => req.originalUrl.includes(p));
 
-        // --- REQUEST DECODING ---
-        let parsedReq = "Empty Payload";
-        if (reqBuffer.length > 0) {
-            if (req.path.includes('/MajorLogin') && MajorLoginDecoder) {
-                try {
-                    const decodedMessage = MajorLoginDecoder.decode(reqBuffer);
-                    const jsonObject = MajorLoginDecoder.toObject(decodedMessage, { defaults: true, bytes: String });
-                    
-                    // 🚀 YAHAN TU APNI REQUEST MODIFY KAR SAKTA HAI BHEJNE SE PEHLE!
-                    // jsonObject.unique_device_id = "FAKE_DEVICE_ID_XYZ";
-                    // reqBuffer = MajorLoginDecoder.encode(MajorLoginDecoder.create(jsonObject)).finish();
-                    
-                    parsedReq = JSON.stringify(jsonObject, null, 2);
-                } catch (err) {
-                    parsedReq = `[DECODE FAILED]\\n${reqBuffer.toString('hex').substring(0, 300)}...`;
-                }
-            } else {
-                parsedReq = "[RAW HEX]\\n" + reqBuffer.toString('hex').substring(0, 300) + "...";
-            }
-        }
-
-        // --- ROUTING (Direct Garena) ---
         if (localRule) {
+            // Local bypass for ver.php
             const mockData = LOCAL_RESPONSES[localRule];
-            status = mockData.status;
-            resBuffer = mockData.data;
             res.setHeader('Content-Type', mockData.type);
-            res.status(status).send(resBuffer);
-        } else {
-            const targetUrl = `${GARENA_OFFICIAL_URL}${pathUrl}`; 
-            const headers = { ...req.headers };
-            delete headers.host; 
-            delete headers['accept-encoding']; 
-            
-            const options = { method: req.method, headers };
-            if (reqBuffer.length > 0) options.body = reqBuffer;
-
-            try {
-                const response = await fetch(targetUrl, options);
-                resBuffer = Buffer.from(await response.arrayBuffer());
-                status = response.status;
-                
-                response.headers.forEach((v, n) => {
-                    if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(n.toLowerCase())) {
-                        res.setHeader(n, v);
-                    }
-                });
-                
-                // 🚀 YAHAN TU GARENA KA RESPONSE MODIFY KAREGA!
-                // if (req.path.includes('/MajorLogin')) {
-                //    Garena ne jo Response bheja hai (Jisme bundles hain),
-                //    tu usay yahan pakar kar edit karega aur phir client ko bhejegia.
-                // }
-
-                res.status(status).send(resBuffer);
-            } catch (fetchErr) {
-                status = 502;
-                resBuffer = Buffer.from("Bad Gateway: Garena connection dropped.");
-                res.status(status).send(resBuffer);
-            }
+            res.status(mockData.status).send(mockData.data);
+            parsedReq = "LOCAL MOCK BYPASS";
+            parsedRes = "SUCCESS";
+            logTraffic(req.method, req.originalUrl, mockData.status, startTime, parsedReq, parsedRes);
+            return;
         }
 
-        // --- RESPONSE LOGGING ---
-        let parsedRes = "Empty Response";
-        if (resBuffer.length > 0) {
-            parsedRes = "[RAW HEX]\\n" + resBuffer.toString('hex').substring(0, 300) + "...";
+        // 🔥 STEP 1: DECRYPT & DECODE INCOMING REQUEST
+        if (reqBuffer.length > 0 && req.path.includes('/MajorLogin')) {
+            const decryptedBuffer = decryptPayload(reqBuffer);
+            if (decryptedBuffer && MajorLoginReq) {
+                try {
+                    const decodedMsg = MajorLoginReq.decode(decryptedBuffer);
+                    const jsonObject = MajorLoginReq.toObject(decodedMsg, { defaults: true, bytes: String });
+                    parsedReq = JSON.stringify(jsonObject, null, 2);
+                    
+                    // 💉 HACKING ZONE: Yahan tu JSON modify kar sakta hai
+                    // jsonObject.client_ip = "127.0.0.1";
+                    
+                    // Re-encode & Re-encrypt
+                    const newProtoBuffer = MajorLoginReq.encode(MajorLoginReq.create(jsonObject)).finish();
+                    const reEncryptedBuffer = encryptPayload(newProtoBuffer);
+                    if (reEncryptedBuffer) finalReqBufferToForward = reEncryptedBuffer;
+
+                } catch (e) { parsedReq = "[DECODE FAILED] " + e.message; }
+            } else { parsedReq = "[DECRYPTION FAILED] Wrong Key?"; }
         }
 
-        requestLogs.unshift({
-            id: Date.now() + '-' + Math.floor(Math.random() * 1000),
+        // 🔥 STEP 2: FORWARD TO GARENA
+        let pathUrl = req.originalUrl;
+        if (pathUrl.startsWith('/')) pathUrl = pathUrl.substring(1); 
+        const targetUrl = `${GARENA_LOGIN_API}/${pathUrl}`; 
+
+        const headers = { ...req.headers };
+        delete headers.host; 
+        delete headers['accept-encoding']; 
+        headers['x-forwarded-for'] = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+
+        const response = await fetch(targetUrl, {
             method: req.method,
-            path: req.originalUrl,
-            duration: `${Date.now() - startTime}ms`,
-            status,
-            req: parsedReq,
-            res: parsedRes,
-            full_req_hex: reqBuffer.toString('hex'), 
-            full_res_hex: resBuffer.toString('hex')  
+            headers: headers,
+            body: finalReqBufferToForward.length > 0 ? finalReqBufferToForward : undefined
         });
 
-        if (requestLogs.length > 50) requestLogs.pop();
+        let resBuffer = Buffer.from(await response.arrayBuffer());
+        
+        // 🔥 STEP 3: DECRYPT & DECODE GARENA'S RESPONSE
+        if (resBuffer.length > 0 && req.path.includes('/MajorLogin')) {
+            const decryptedResBuffer = decryptPayload(resBuffer);
+            if (decryptedResBuffer && MajorLoginRes) {
+                try {
+                    const decodedResMsg = MajorLoginRes.decode(decryptedResBuffer);
+                    const jsonResObject = MajorLoginRes.toObject(decodedResMsg, { defaults: true, bytes: String });
+                    parsedRes = JSON.stringify(jsonResObject, null, 2);
+                    
+                    // 💉 HACKING ZONE: Modify response from Garena here before sending to game!
+
+                } catch (e) { parsedRes = "[RES DECODE FAILED] " + e.message; }
+            } else { parsedRes = "[RES DECRYPTION FAILED]"; }
+        } else if (resBuffer.length > 0) {
+            parsedRes = "[RAW HEX] " + resBuffer.toString('hex').substring(0, 100) + "...";
+        }
+
+        response.headers.forEach((v, n) => {
+            if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(n.toLowerCase())) {
+                res.setHeader(n, v);
+            }
+        });
+        
+        res.status(response.status).send(resBuffer);
+        logTraffic(req.method, req.originalUrl, response.status, startTime, parsedReq, parsedRes);
 
     } catch (e) {
-        if (!res.headersSent) res.status(500).send(e.message);
+        if (!res.headersSent) res.status(502).send("Bad Gateway");
+        logTraffic(req.method, req.originalUrl, 502, startTime, parsedReq, "[ERROR] " + e.message);
     }
 });
+
+function logTraffic(method, path, status, startTime, reqData, resData) {
+    requestLogs.unshift({
+        id: Date.now() + '-' + Math.floor(Math.random() * 1000),
+        method, path, status,
+        duration: `${Date.now() - startTime}ms`,
+        req: reqData, res: resData
+    });
+    if (requestLogs.length > 50) requestLogs.pop();
+}
 
 module.exports = app;
