@@ -1,15 +1,22 @@
 {
-  "name": "fast-proxy-server",
-  "version": "1.0.0",
-  "description": "Ultra-fast proxy and logger",
+  "name": "king-nexus-engine",
+  "version": "2.0.0",
+  "description": "Ultra-fast proxy interceptor and logger with Persistent DB",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "protobufjs": "^7.2.6"
+    "protobufjs": "^7.3.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
