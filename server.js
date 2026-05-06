@@ -5,17 +5,18 @@ const crypto = require('crypto');
 const app = express();
 app.use(cors());
 
-// 🔥 RAW BODY CAPTURE FOR SNIFFING
+// 🔥 RAW BODY CAPTURE FOR SNIFFING & INJECTING
 app.use(express.raw({ type: '*/*', limit: '500mb' }));
 
-// 🌐 GARENA MASTER SERVERS
+// 🌐 GARENA MASTER SERVERS & YOUR URL
+const MY_PROXY_URL = 'https://rm-proxy-intercept.vercel.app'; // 🚀 TERA VERCEL URL
 const SERVERS = {
     LOGIN: 'loginbp.ggpolarbear.com',
     CLIENT: 'clientbp.ggpolarbear.com',
-    DL: 'dl.castle.freefiremobile.com' // Naya CDN Server
+    DL: 'dl.castle.freefiremobile.com'
 };
 
-const PYTHON_API = 'https://protos-gray.vercel.app/api/decode'; 
+const PYTHON_API = 'https://protos-gray.vercel.app'; 
 
 const AES_KEY = Buffer.from('Yg&tc%DEuh6%Zc^8', 'utf8');
 const AES_IV  = Buffer.from('6oyZDr22E3ychjM%', 'utf8');
@@ -24,17 +25,14 @@ const ALGO    = 'aes-128-cbc';
 let requestLogsBuffer = []; 
 
 // ==========================================
-// 🗺️ 1. THE SNIFFER ROUTER MAP
+// 🗺️ 1. THE ROUTER MAP
 // ==========================================
-// Yahan hum define kar rahe hain ke konsi request kis server par jani chahiye
 const ROUTE_MAP = {
-    // Login & Auth
     'MajorLogin': { req: 'LoginReq', res: 'LoginRes', encrypt: true, target: SERVERS.LOGIN },
     'PlatformRegister': { req: 'PlatformRegisterReq', res: null, encrypt: false, target: SERVERS.LOGIN },
     'GetAccountBriefInfoBeforeLogin': { req: null, res: null, encrypt: true, target: SERVERS.LOGIN },
     'Ping': { req: null, res: null, encrypt: true, target: SERVERS.LOGIN },
 
-    // Game Client & Inventory
     'GetPlayerPersonalShow': { req: 'GetPlayerPersonalShow', res: 'AccountPersonalShowInfo', encrypt: false, target: SERVERS.CLIENT },
     'GetPlayerProfile': { req: null, res: null, encrypt: true, target: SERVERS.CLIENT },
     'SearchWorkshopCode': { req: 'SearchWorkshopCode', res: null, encrypt: false, target: SERVERS.CLIENT },
@@ -43,41 +41,56 @@ const ROUTE_MAP = {
     'GetVault': { req: null, res: null, encrypt: true, target: SERVERS.CLIENT },
     'SyncInventory': { req: null, res: null, encrypt: true, target: SERVERS.CLIENT },
     
-    // Downloads & Updates (Naya Server)
     'ABHotUpdates': { req: null, res: null, encrypt: false, target: SERVERS.DL },
     'common': { req: null, res: null, encrypt: false, target: SERVERS.DL }
 };
 
 // ==========================================
-// 🛠️ 2. SMART DECRYPT & PYTHON BRIDGE
+// 🛠️ 2. SMART CRYPTO ENGINE (WITH PREFIX HANDLING)
 // ==========================================
 function smartDecrypt(buffer) {
-    if (!buffer || buffer.length === 0) return null;
+    if (!buffer || buffer.length === 0) return { dec: null, prefix: Buffer.alloc(0) };
     const offsets = [0, 2, 4];
     for (let offset of offsets) {
         if (buffer.length <= offset) continue;
         try {
             const decipher = crypto.createDecipheriv(ALGO, AES_KEY, AES_IV);
-            return Buffer.concat([decipher.update(buffer.slice(offset)), decipher.final()]);
+            const dec = Buffer.concat([decipher.update(buffer.slice(offset)), decipher.final()]);
+            return { dec, prefix: buffer.slice(0, offset) };
         } catch (e) {}
     }
-    return null;
+    return { dec: null, prefix: Buffer.alloc(0) };
 }
 
-async function decodeWithPython(msgName, buffer) {
-    if (!buffer || buffer.length === 0) return "[EMPTY DATA]";
+function encryptData(buffer, prefix) {
     try {
-        const response = await fetch(PYTHON_API, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+        const cipher = crypto.createCipheriv(ALGO, AES_KEY, AES_IV);
+        const enc = Buffer.concat([cipher.update(buffer), cipher.final()]);
+        return Buffer.concat([prefix, enc]); // Wapas prefix laga do taake binary corrupt na ho
+    } catch (e) { return null; }
+}
+
+async function decodeWithPythonRaw(msgName, buffer) {
+    if (!buffer || buffer.length === 0) return null;
+    try {
+        const response = await fetch(`${PYTHON_API}/api/decode`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ msg_name: msgName, data: buffer.toString('base64') })
         });
         const result = await response.json();
-        if (result.success) return JSON.stringify(result.data, null, 2);
-        return `[PYTHON DECODE FAIL] ${result.error}\n[HEX] ${buffer.toString('hex').slice(0, 250)}...`;
-    } catch (e) {
-        return `[PYTHON API OFFLINE]\n[HEX] ${buffer.toString('hex').slice(0, 250)}...`;
-    }
+        return result.success ? result.data : null;
+    } catch (e) { return null; }
+}
+
+async function encodeWithPythonRaw(msgName, jsonData) {
+    try {
+        const response = await fetch(`${PYTHON_API}/api/encode`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ msg_name: msgName, data: jsonData })
+        });
+        const result = await response.json();
+        return result.success ? Buffer.from(result.data, 'base64') : null;
+    } catch (e) { return null; }
 }
 
 // ==========================================
@@ -90,7 +103,6 @@ app.get('/api/internal/logs/sync', (req, res) => {
 app.post('/api/internal/clear', (req, res) => { requestLogsBuffer = []; res.json({ success: true }); });
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// 👑 4. THE SNIFFER DASHBOARD
 app.get('/romeo/ds', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -98,7 +110,7 @@ app.get('/romeo/ds', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <title>👑 King Nexus | V8 Sniffer Engine</title>
+        <title>👑 King Nexus | V9 Hijacker Engine</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
         <style>
@@ -117,16 +129,15 @@ app.get('/romeo/ds', (req, res) => {
             <header class="flex flex-col md:flex-row justify-between items-center pb-4 mb-4 border-b border-purple-500/20 gap-4">
                 <div class="flex items-center gap-4">
                     <div class="p-3 bg-purple-900/30 rounded-lg aurora-glow">
-                        <h1 class="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 tracking-widest uppercase" style="font-family: 'Orbitron', sans-serif;">KING_NEXUS V8</h1>
+                        <h1 class="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 tracking-widest uppercase" style="font-family: 'Orbitron', sans-serif;">KING_NEXUS V9</h1>
                         <div class="flex items-center gap-2 mt-1">
                             <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
-                            <p id="storage-status" class="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">⚡ PURE MITM SNIFFER MODE</p>
+                            <p id="storage-status" class="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">💉 ACTIVE INJECTION MODE</p>
                         </div>
                     </div>
                 </div>
                 <div class="flex flex-wrap gap-2 items-center justify-center">
                     <input type="text" id="searchBox" oninput="fullRender()" placeholder="🔍 Search logs..." class="px-3 py-2 bg-black/50 border border-purple-500/30 rounded-md text-xs text-white focus:outline-none w-48">
-                    <button onclick="copyAllLogs(this)" class="px-3 py-2 bg-purple-900/30 text-purple-300 border border-purple-500/50 hover:bg-purple-600 hover:text-white transition-all text-[10px] font-black rounded-md tracking-wider aurora-glow">📋 COPY ALL</button>
                     <button onclick="nukeEverything()" class="px-3 py-2 bg-red-950 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white transition-all text-[10px] font-black rounded-md tracking-wider">🗑️ CLEAR</button>
                 </div>
             </header>
@@ -134,7 +145,7 @@ app.get('/romeo/ds', (req, res) => {
         </div>
 
         <script>
-            const db = new Dexie("NexusV8DB");
+            const db = new Dexie("NexusV9DB");
             db.version(1).stores({ logs: 'id, timestamp, method, targetHost, path, status, duration' });
 
             async function syncServerData() {
@@ -145,15 +156,13 @@ app.get('/romeo/ds', (req, res) => {
                         await db.logs.bulkPut(newLogs); 
                         if(document.getElementById('searchBox').value.trim() === "") appendNewLogs(newLogs); 
                         else fullRender(); 
-                        document.getElementById('storage-status').innerText = (await db.logs.count()) + " LOGS INTERCEPTED";
                     }
                 } catch(e) {}
             }
 
             function generateLogHTML(log) {
                 let isError = log.status >= 400;
-                let isSuccess = log.status >= 200 && log.status < 300;
-                let statusColor = isError ? 'text-red-400 bg-red-900/30' : (isSuccess ? 'text-green-400 bg-green-900/30' : 'text-yellow-400 bg-yellow-900/30');
+                let statusColor = isError ? 'text-red-400 bg-red-900/30' : 'text-green-400 bg-green-900/30';
                 return \`
                 <div class="glass-panel rounded-xl p-3 sm:p-4 transition-all \${isError ? 'border-red-500/30' : 'border-purple-500/30 aurora-glow'}">
                     <div class="flex justify-between items-center mb-3 pb-2 border-b border-white/5 gap-2">
@@ -187,10 +196,6 @@ app.get('/romeo/ds', (req, res) => {
                 document.getElementById('logs-container').innerHTML = logs.map(generateLogHTML).join('');
             }
             async function nukeEverything() { await fetch('/api/internal/clear', { method: 'POST' }); await db.logs.clear(); document.getElementById('logs-container').innerHTML = ''; }
-            async function copyAllLogs(btn) {
-                const allLogs = await db.logs.orderBy('id').reverse().toArray();
-                if(allLogs.length) navigator.clipboard.writeText(JSON.stringify(allLogs, null, 2)).then(() => { btn.innerText = '✅ COPIED'; setTimeout(() => btn.innerText = '📋 COPY ALL', 2000); });
-            }
             setInterval(syncServerData, 1000); fullRender(); 
         </script>
     </body>
@@ -199,7 +204,7 @@ app.get('/romeo/ds', (req, res) => {
 });
 
 // ==========================================
-// 🌌 5. CATCH-ALL ASYNC PURE MITM INTERCEPTOR
+// 🌌 4. CATCH-ALL HYBRID INTERCEPTOR (ASYNC + SYNC INJECTION)
 // ==========================================
 app.all('*', async (req, res) => {
     if (req.path === '/') return res.redirect('/romeo/ds');
@@ -207,7 +212,7 @@ app.all('*', async (req, res) => {
     const startTime = Date.now();
     let reqBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
 
-    // --- 🛑 1. CHECK LOCAL BYPASS (MANDATORY FOR GAME TO START) ---
+    // --- 🛑 1. CHECK LOCAL BYPASS ---
     if (req.originalUrl.includes('/ver.php')) {
         const mockData = {
             "code": 0, "is_server_open": true, "is_firewall_open": false,
@@ -223,22 +228,14 @@ app.all('*', async (req, res) => {
             "is_review_server": false, "use_login_optional_download": true,
             "use_background_download": true, "use_background_download_lobby": true,
             "country_code": "SG", "client_ip": "15.235.211.216", "gdpr_version": 0,
-            "billboard_msg": "👑 KING AURORA V8: MITM SNIFFER",
+            "billboard_msg": "👑 KING AURORA V9: HIJACKER",
             "core_url": "csoversea.castle.freefiremobile.com",
             "core_ip_list": ["0.0.0.0", "50.109.27.134", "129.226.2.163"],
             "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefireth",
             "garena_login": false, "garena_hint": false
         };
         res.setHeader('Content-Type', 'application/json');
-        res.status(200).json(mockData); 
-        
-        requestLogsBuffer.push({
-            id: Date.now() + '-' + Math.floor(Math.random()*10000), timestamp: new Date().toLocaleTimeString(),
-            method: req.method, targetHost: 'loginbp.ggpolarbear.com', path: req.originalUrl, status: 200, duration: `${Date.now() - startTime}ms`,
-            req: Object.keys(req.query).length > 0 ? JSON.stringify(req.query, null, 2) : "LOCAL BYPASS TRIGGERED", 
-            res: JSON.stringify(mockData, null, 2)
-        });
-        return;
+        return res.status(200).json(mockData); 
     }
 
     // --- 🌐 2. DYNAMIC HOST DETECTION ---
@@ -246,14 +243,9 @@ app.all('*', async (req, res) => {
     const matchedRouteKey = Object.keys(ROUTE_MAP).find(key => req.originalUrl.includes(key));
     const routeConfig = matchedRouteKey ? ROUTE_MAP[matchedRouteKey] : null;
     
-    // Agar humein route nahi mila, to hum assume karenge ye Client API hai (Inventory etc)
     let targetHost = (routeConfig && routeConfig.target) ? routeConfig.target : SERVERS.CLIENT;
+    if (req.headers['x-target-host']) targetHost = req.headers['x-target-host'];
     
-    // Agar request HttpCanary se aayi hai aur usne asli Host header bheja hai (like dl.castle.freefiremobile.com)
-    if (req.headers['x-target-host']) {
-        targetHost = req.headers['x-target-host'];
-    }
-
     const targetUrl = `https://${targetHost}/${pathUrl}`;
 
     try {
@@ -262,64 +254,80 @@ app.all('*', async (req, res) => {
         delete headers['accept-encoding']; 
         headers['x-forwarded-for'] = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-        // --- ⏩ 3. FORWARD TO TRUE DESTINATION ---
         const garenaResponse = await fetch(targetUrl, {
             method: req.method, headers: headers,
             body: (req.method !== 'GET' && req.method !== 'HEAD' && reqBuffer.length > 0) ? reqBuffer : undefined
         });
 
-        const resBuffer = Buffer.from(await garenaResponse.arrayBuffer());
+        let resBuffer = Buffer.from(await garenaResponse.arrayBuffer());
+        let modifiedResLog = null; // Agar hum modify karenge toh dashboard ke liye yahan save karenge
 
-        // Send back to game untouched
+        // ========================================================
+        // 💉 3. ACTIVE INJECTION ZONE (BLOCKING FOR MAJORLOGIN)
+        // ========================================================
+        if (req.originalUrl.includes('MajorLogin') && resBuffer.length > 0) {
+            console.log("💉 Intercepted MajorLogin, preparing injection...");
+            const { dec: decryptedRes, prefix } = smartDecrypt(resBuffer);
+            
+            if (decryptedRes) {
+                let jsonRes = await decodeWithPythonRaw('LoginRes', decryptedRes);
+                
+                if (jsonRes && jsonRes.server_url) {
+                    const oldUrl = jsonRes.server_url;
+                    jsonRes.server_url = MY_PROXY_URL; // 🔥 HIJACK!
+                    modifiedResLog = JSON.stringify(jsonRes, null, 2);
+                    
+                    console.log(`✅ Injecting URL: ${oldUrl} -> ${MY_PROXY_URL}`);
+
+                    let reEncodedBin = await encodeWithPythonRaw('LoginRes', jsonRes);
+                    if (reEncodedBin) {
+                        let reEncryptedBin = encryptData(reEncodedBin, prefix);
+                        if (reEncryptedBin) {
+                            resBuffer = reEncryptedBin; // 🔥 OVERWRITE ORIGINAL BUFFER
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- ⏩ 4. FORWARD TO GAME CLIENT ---
         garenaResponse.headers.forEach((v, n) => {
             if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(n.toLowerCase())) res.setHeader(n, v);
         });
         res.status(garenaResponse.status).send(resBuffer);
 
-        // --- 📥 4. BACKGROUND DECODING & LOGGING ---
-        processAndLog(req.method, targetHost, req.originalUrl, req.query, reqBuffer, resBuffer, garenaResponse.status, startTime, routeConfig);
+        // --- 📥 5. BACKGROUND LOGGING ---
+        processAndLog(req.method, targetHost, req.originalUrl, req.query, reqBuffer, resBuffer, garenaResponse.status, startTime, routeConfig, modifiedResLog);
 
     } catch (e) {
         if (!res.headersSent) res.status(502).send("GATEWAY ERROR");
-        processAndLog(req.method, targetHost, req.originalUrl, req.query, reqBuffer, Buffer.from(e.message), 502, startTime, null);
     }
 });
 
-async function processAndLog(method, targetHost, originalUrl, query, reqBuffer, resBuffer, status, startTime, routeConfig) {
+async function processAndLog(method, targetHost, originalUrl, query, reqBuffer, resBuffer, status, startTime, routeConfig, modifiedResLog) {
     let parsedReqLog = "[EMPTY OR RAW BINARY]";
-    let parsedResLog = "[EMPTY OR RAW BINARY]";
+    let parsedResLog = modifiedResLog || "[EMPTY OR RAW BINARY]";
 
-    // Request Decode
     if (reqBuffer.length > 0) {
-        let bufferToProcess = reqBuffer;
-        if ((routeConfig && routeConfig.encrypt) || !routeConfig) { 
-            const decrypted = smartDecrypt(reqBuffer);
-            if (decrypted) bufferToProcess = decrypted;
-        }
-
+        let toDec = (routeConfig && routeConfig.encrypt) ? smartDecrypt(reqBuffer).dec : reqBuffer;
         if (routeConfig && routeConfig.req) {
-            parsedReqLog = await decodeWithPython(routeConfig.req, bufferToProcess);
+            let jsonDec = await decodeWithPythonRaw(routeConfig.req, toDec || reqBuffer);
+            parsedReqLog = jsonDec ? JSON.stringify(jsonDec, null, 2) : "[DECODE FAIL]";
         } else {
-            let tryString = bufferToProcess.toString('utf8');
-            if (/^[\x20-\x7E]*$/.test(tryString) && tryString.length > 5) parsedReqLog = tryString.slice(0, 3000);
-            else parsedReqLog = `[RAW BINARY] Size: ${bufferToProcess.length}\n[HEX] ${bufferToProcess.toString('hex').match(/.{1,32}/g)?.join('\n') || ''}`;
+            parsedReqLog = toDec ? toDec.toString('utf8').slice(0, 3000) : "[BINARY]";
         }
     } else if (Object.keys(query).length > 0) {
         parsedReqLog = JSON.stringify(query, null, 2);
     }
 
-    // Response Decode
-    if (resBuffer.length > 0) {
+    if (!modifiedResLog && resBuffer.length > 0) {
         if (routeConfig && routeConfig.res) {
-            parsedResLog = await decodeWithPython(routeConfig.res, resBuffer);
+            let toDec = (routeConfig && routeConfig.encrypt) ? smartDecrypt(resBuffer).dec : resBuffer;
+            let jsonDec = await decodeWithPythonRaw(routeConfig.res, toDec || resBuffer);
+            parsedResLog = jsonDec ? JSON.stringify(jsonDec, null, 2) : "[DECODE FAIL]";
         } else {
-            try {
-                parsedResLog = JSON.stringify(JSON.parse(resBuffer.toString('utf8')), null, 2);
-            } catch {
-                let text = resBuffer.toString('utf8');
-                if (/^[\x20-\x7E\n\r]*$/.test(text) && text.length > 5) parsedResLog = text.length < 5000 ? text : `[TEXT RESPONSE] Size: ${resBuffer.length}`;
-                else parsedResLog = `[RAW BINARY RESPONSE] Size: ${resBuffer.length}\n[HEX] ${resBuffer.toString('hex').match(/.{1,32}/g)?.join('\n') || ''}`;
-            }
+            let text = resBuffer.toString('utf8');
+            parsedResLog = /^[\x20-\x7E\n\r]*$/.test(text) ? text.slice(0, 5000) : `[RAW BINARY RESPONSE] Size: ${resBuffer.length}`;
         }
     }
 
