@@ -4,14 +4,9 @@ const crypto = require('crypto');
 
 const app = express();
 app.use(cors());
-// Speed Optimization: Sirf POST/PUT ki body parse hogi
-app.use((req, res, next) => {
-    if (req.method === 'POST' || req.method === 'PUT') {
-        express.raw({ type: '*/*', limit: '50mb' })(req, res, next);
-    } else {
-        next();
-    }
-});
+
+// 🔥 RAW BODY HAR REQUEST KE LIYE PUKKA CAPTURE KAREGA
+app.use(express.raw({ type: '*/*', limit: '200mb' }));
 
 const GARENA_API = 'https://loginbp.ggpolarbear.com';
 const PYTHON_API = 'https://protos-gray.vercel.app/api/decode'; // 🐍 TUMHARI PYTHON API
@@ -23,24 +18,22 @@ const ALGO    = 'aes-128-cbc';
 let requestLogsBuffer = []; 
 
 // ==========================================
-// 🗺️ 1. PATH TO PROTO MAPPING (Edit this for new protos)
+// 🗺️ 1. PROTO MAPPING MAP
 // ==========================================
-// Yahan hum batate hain ke kis URL path par konsa proto message use hoga
 const PROTO_ROUTES = {
     'MajorLogin': { req: 'LoginReq', res: 'LoginRes', encrypt: true },
     'PlatformRegister': { req: 'PlatformRegisterReq', res: null, encrypt: false },
     'GetPlayerPersonalShow': { req: 'GetPlayerPersonalShow', res: 'AccountPersonalShowInfo', encrypt: false },
     'SearchWorkshopCode': { req: 'SearchWorkshopCode', res: null, encrypt: false },
     'like': { req: 'like', res: 'Info', encrypt: false },
-    'Ping': { req: null, res: null, encrypt: true } // Ping mostly encrypted text hota hai
+    'Ping': { req: null, res: null, encrypt: true }
 };
 
 // ==========================================
-// 🛠️ 2. SMART CRYPTO ENGINE & PYTHON BRIDGE
+// 🛠️ 2. SMART DECRYPT & PYTHON BRIDGE
 // ==========================================
 function smartDecrypt(buffer) {
     if (!buffer || buffer.length === 0) return null;
-    // FreeFire wale kabhi kabhi shuru me 2 ya 4 bytes ka header lagate hain
     const offsets = [0, 2, 4];
     for (let offset of offsets) {
         if (buffer.length <= offset) continue;
@@ -52,37 +45,21 @@ function smartDecrypt(buffer) {
     return null;
 }
 
-// Ye function Node.js ka data Python API ko bhej kar JSON wapis lata hai
+// Background Task (Game ki speed pe koi asar nahi dalega)
 async function decodeWithPython(msgName, buffer) {
     if (!buffer || buffer.length === 0) return "[EMPTY DATA]";
     try {
         const response = await fetch(PYTHON_API, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                msg_name: msgName,
-                data: buffer.toString('base64')
-            })
+            body: JSON.stringify({ msg_name: msgName, data: buffer.toString('base64') })
         });
         const result = await response.json();
         if (result.success) return JSON.stringify(result.data, null, 2);
-        
-        return `[PYTHON DECODE FAIL: ${result.error}]\n[HEX] ${buffer.toString('hex').slice(0, 200)}...`;
+        return `[PYTHON DECODE FAIL]\nError: ${result.error}\n[HEX] ${buffer.toString('hex').slice(0, 150)}...`;
     } catch (e) {
-        return `[PYTHON API OFFLINE or TIMEOUT]\n[HEX] ${buffer.toString('hex').slice(0, 200)}...`;
+        return `[PYTHON API OFFLINE]\n[HEX] ${buffer.toString('hex').slice(0, 150)}...`;
     }
-}
-
-function logTraffic(method, path, status, startTime, reqData, resData) {
-    const newLog = {
-        id: Date.now() + '-' + Math.floor(Math.random() * 100000),
-        timestamp: new Date().toLocaleTimeString(),
-        method, path, status,
-        duration: `${Date.now() - startTime}ms`,
-        req: reqData, res: resData
-    };
-    requestLogsBuffer.push(newLog); 
-    if (requestLogsBuffer.length > 2000) requestLogsBuffer.shift(); 
 }
 
 // ==========================================
@@ -105,7 +82,7 @@ const LOCAL_RESPONSES = {
             "is_review_server": false, "use_login_optional_download": true,
             "use_background_download": true, "use_background_download_lobby": true,
             "country_code": "SG", "client_ip": "15.235.211.216", "gdpr_version": 0,
-            "billboard_msg": "👑 KING AURORA V4: HYBRID ENGINE",
+            "billboard_msg": "👑 KING AURORA V5: HYBRID ASYNC ENGINE",
             "core_url": "csoversea.castle.freefiremobile.com",
             "core_ip_list": ["0.0.0.0", "50.109.27.134", "129.226.2.163"],
             "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefireth",
@@ -117,7 +94,6 @@ const LOCAL_RESPONSES = {
 // ==========================================
 // 🚀 4. API & DASHBOARD ROUTES
 // ==========================================
-app.get('/', (req, res) => res.redirect('/romeo/ds'));
 app.get('/api/internal/logs/sync', (req, res) => {
     const logsToSend = [...requestLogsBuffer];
     requestLogsBuffer = []; res.json(logsToSend);
@@ -126,9 +102,7 @@ app.post('/api/internal/clear', (req, res) => { requestLogsBuffer = []; res.json
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 app.get('/favicon.png', (req, res) => res.status(204).end());
 
-// ==========================================
 // 👑 5. THE HYBRID DASHBOARD UI
-// ==========================================
 app.get('/romeo/ds', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -136,7 +110,7 @@ app.get('/romeo/ds', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <title>👑 King Nexus | V4 Hybrid Engine</title>
+        <title>👑 King Nexus | 0ms Async Engine</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
         <style>
@@ -155,15 +129,15 @@ app.get('/romeo/ds', (req, res) => {
             <header class="flex flex-col md:flex-row justify-between items-center pb-4 mb-4 border-b border-purple-500/20 gap-4">
                 <div class="flex items-center gap-4">
                     <div class="p-3 bg-purple-900/30 rounded-lg aurora-glow">
-                        <h1 class="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 tracking-widest uppercase" style="font-family: 'Orbitron', sans-serif;">KING_NEXUS V4</h1>
+                        <h1 class="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 tracking-widest uppercase" style="font-family: 'Orbitron', sans-serif;">KING_NEXUS V5</h1>
                         <div class="flex items-center gap-2 mt-1">
                             <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">🐍 PYTHON API CONNECTED</p>
+                            <p class="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">⚡ 0ms ASYNC MODE</p>
                         </div>
                     </div>
                 </div>
                 <div class="flex flex-wrap gap-2 items-center justify-center">
-                    <input type="text" id="searchBox" oninput="filterLogs()" placeholder="🔍 Search path, status..." class="px-3 py-2 bg-black/50 border border-purple-500/30 rounded-md text-xs text-white focus:outline-none w-48">
+                    <input type="text" id="searchBox" oninput="filterLogs()" placeholder="🔍 Search logs..." class="px-3 py-2 bg-black/50 border border-purple-500/30 rounded-md text-xs text-white focus:outline-none w-48">
                     <button onclick="copyAllLogs(this)" class="px-3 py-2 bg-purple-900/30 text-purple-300 border border-purple-500/50 hover:bg-purple-600 hover:text-white transition-all text-[10px] font-black rounded-md tracking-wider aurora-glow">📋 COPY ALL</button>
                     <button onclick="nukeEverything()" class="px-3 py-2 bg-red-950 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white transition-all text-[10px] font-black rounded-md tracking-wider">🗑️ NUKE</button>
                 </div>
@@ -172,7 +146,7 @@ app.get('/romeo/ds', (req, res) => {
         </div>
 
         <script>
-            const db = new Dexie("NexusV4DB");
+            const db = new Dexie("NexusV5DB");
             db.version(1).stores({ logs: 'id, timestamp, method, path, status, duration' });
             let currentLogs = [];
 
@@ -185,10 +159,8 @@ app.get('/romeo/ds', (req, res) => {
             }
 
             async function nukeEverything() { 
-                if(confirm("⚠ WARNING: Delete all logs?")) {
-                    await fetch('/api/internal/clear', { method: 'POST' }); 
-                    await db.logs.clear(); updateUI(); 
-                }
+                await fetch('/api/internal/clear', { method: 'POST' }); 
+                await db.logs.clear(); updateUI(); 
             }
 
             async function copyAllLogs(btn) {
@@ -216,13 +188,13 @@ app.get('/romeo/ds', (req, res) => {
                 container.innerHTML = logsArray.map(log => {
                     let isError = log.status >= 400;
                     let isSuccess = log.status >= 200 && log.status < 300;
-                    let statusColor = isError ? 'text-red-400 bg-red-900/30 border-red-500/50' : (isSuccess ? 'text-green-400 bg-green-900/30 border-green-500/50' : 'text-yellow-400 bg-yellow-900/30 border-yellow-500/50');
+                    let statusColor = isError ? 'text-red-400 bg-red-900/30' : (isSuccess ? 'text-green-400 bg-green-900/30' : 'text-yellow-400 bg-yellow-900/30');
                     return \`
-                    <div class="glass-panel rounded-xl p-3 sm:p-4 transition-all \${isError ? 'border-red-500/30' : 'hover:border-purple-500/50'}">
-                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 pb-2 border-b border-white/5 gap-2">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <span class="text-white font-black text-[10px] bg-white/10 px-2 py-1 rounded border border-white/10">\${log.method}</span>
-                                <span class="text-blue-300 font-bold text-xs tracking-wide break-all">\${log.path}</span>
+                    <div class="glass-panel rounded-xl p-3 sm:p-4 transition-all \${isError ? 'border-red-500/30' : 'border-purple-500/30 aurora-glow'}">
+                        <div class="flex justify-between items-center mb-3 pb-2 border-b border-white/5 gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-white font-black text-[10px] bg-white/10 px-2 py-1 rounded">\${log.method}</span>
+                                <span class="text-blue-300 font-bold text-xs break-all">\${log.path}</span>
                             </div>
                             <div class="flex items-center gap-3">
                                 <span class="text-gray-500 text-[9px] font-bold">\${log.timestamp} | \${log.duration}</span>
@@ -242,7 +214,7 @@ app.get('/romeo/ds', (req, res) => {
                     </div>\`;
                 }).join('');
             }
-            setInterval(syncServerData, 1500); updateUI(); 
+            setInterval(syncServerData, 1000); updateUI(); 
         </script>
     </body>
     </html>
@@ -250,108 +222,119 @@ app.get('/romeo/ds', (req, res) => {
 });
 
 // ==========================================
-// 🌌 6. CATCH-ALL PROXY INTERCEPTOR 
+// 🌌 6. CATCH-ALL ASYNC PROXY INTERCEPTOR (0ms LAG)
 // ==========================================
 app.all('*', async (req, res) => {
+    // Only intercept Dashboard
+    if (req.path === '/') return res.redirect('/romeo/ds');
+
     const startTime = Date.now();
     let reqBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
-    let parsedReqLog = "[EMPTY OR RAW BINARY]";
-    let parsedResLog = "[EMPTY OR RAW BINARY]";
 
     // --- 🛑 1. CHECK LOCAL BYPASS (VER.PHP) ---
     const localRule = Object.keys(LOCAL_RESPONSES).find(p => req.originalUrl.includes(p));
     if (localRule) {
         const mock = LOCAL_RESPONSES[localRule];
-        parsedReqLog = Object.keys(req.query).length > 0 ? JSON.stringify(req.query, null, 2) : "LOCAL BYPASS TRIGGERED";
         res.setHeader('Content-Type', mock.type);
-        res.status(mock.status).send(mock.data);
-        logTraffic(req.method, req.originalUrl, mock.status, startTime, parsedReqLog, JSON.stringify(JSON.parse(mock.data.toString()), null, 2));
+        res.status(mock.status).send(mock.data); // Fauran response bhej do
+        
+        // Background logging
+        const parsedReqLog = Object.keys(req.query).length > 0 ? JSON.stringify(req.query, null, 2) : "LOCAL BYPASS TRIGGERED";
+        const newLog = {
+            id: Date.now() + '-' + Math.floor(Math.random()*10000), timestamp: new Date().toLocaleTimeString(),
+            method: req.method, path: req.originalUrl, status: mock.status, duration: `${Date.now() - startTime}ms`,
+            req: parsedReqLog, res: JSON.stringify(JSON.parse(mock.data.toString()), null, 2)
+        };
+        requestLogsBuffer.push(newLog);
         return;
     }
 
-    // --- 🔍 2. ROUTE MATCHING (Identify Proto) ---
-    // Check if the current URL matches any known proto mapping
-    const matchedRouteKey = Object.keys(PROTO_ROUTES).find(key => req.path.includes(key));
-    const routeConfig = matchedRouteKey ? PROTO_ROUTES[matchedRouteKey] : null;
-
-    // --- 📤 3. INTERCEPT & PARSE REQUEST ---
-    if (reqBuffer.length > 0) {
-        let bufferToProcess = reqBuffer;
-
-        // AES Decryption agar zaroori hai (e.g. MajorLogin)
-        if (routeConfig && routeConfig.encrypt) {
-            const decrypted = smartDecrypt(reqBuffer);
-            if (decrypted) bufferToProcess = decrypted;
-        }
-
-        // Send to Python API if we have a msg_name for request
-        if (routeConfig && routeConfig.req) {
-            parsedReqLog = await decodeWithPython(routeConfig.req, bufferToProcess);
-        } else {
-            // Fallback (Text ya HEX)
-            let tryString = bufferToProcess.toString('utf8');
-            if (/^[\x20-\x7E]*$/.test(tryString) && tryString.length > 5) {
-                parsedReqLog = tryString.slice(0, 3000);
-            } else {
-                parsedReqLog = `[RAW BINARY / UNKNOWN PROTO] Size: ${bufferToProcess.length} bytes\n[HEX] ${bufferToProcess.toString('hex').match(/.{1,32}/g)?.join('\n') || ''}`;
-            }
-        }
-    } else if (Object.keys(req.query).length > 0) {
-        parsedReqLog = JSON.stringify(req.query, null, 2);
-    }
-
-    // --- 🌐 4. FORWARD TO REAL GARENA SERVER ---
+    // --- 🌐 2. FORWARD TO GARENA IMMEDIATELY (0ms Blocking) ---
     try {
         let pathUrl = req.originalUrl.replace(/^\//, ''); 
         const targetUrl = `${GARENA_API}/${pathUrl}`;
 
+        // Host header badalna zaroori hai warna Garena server error (500) deta hai
         const headers = { ...req.headers };
-        delete headers.host;
+        headers['host'] = 'loginbp.ggpolarbear.com'; 
         delete headers['accept-encoding']; 
         headers['x-forwarded-for'] = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
-        const response = await fetch(targetUrl, {
+        // 🚀 GAME SE GARENA KO DATA PHENKO
+        const garenaResponse = await fetch(targetUrl, {
             method: req.method,
             headers: headers,
             body: (req.method !== 'GET' && req.method !== 'HEAD' && reqBuffer.length > 0) ? reqBuffer : undefined
         });
 
-        let resBuffer = Buffer.from(await response.arrayBuffer());
+        const resBuffer = Buffer.from(await garenaResponse.arrayBuffer());
 
-        // --- 📥 5. INTERCEPT & PARSE RESPONSE ---
-        if (resBuffer.length > 0) {
-            // Python API se Decode karwao agar Res proto mapped hai
-            if (routeConfig && routeConfig.res) {
-                parsedResLog = await decodeWithPython(routeConfig.res, resBuffer);
-            } else {
-                // Normal JSON ya Raw Text Fallback
-                try {
-                    parsedResLog = JSON.stringify(JSON.parse(resBuffer.toString('utf8')), null, 2);
-                } catch {
-                    let text = resBuffer.toString('utf8');
-                    if (/^[\x20-\x7E\n\r]*$/.test(text) && text.length > 5) {
-                        parsedResLog = text.length < 5000 ? text : `[TEXT RESPONSE] Size: ${resBuffer.length} bytes`;
-                    } else {
-                        parsedResLog = `[RAW BINARY RESPONSE] Size: ${resBuffer.length} bytes\n[HEX] ${resBuffer.toString('hex').match(/.{1,32}/g)?.join('\n') || ''}`;
-                    }
-                }
-            }
-        }
-
-        // Send back to Game Client
-        response.headers.forEach((v, n) => {
-            if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(n.toLowerCase())) {
-                res.setHeader(n, v);
-            }
+        // 🚀 GARENA SE GAME KO DATA WAPIS DO (Client ko wait nahi karwana)
+        garenaResponse.headers.forEach((v, n) => {
+            if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(n.toLowerCase())) res.setHeader(n, v);
         });
-        res.status(response.status).send(resBuffer);
-        
-        logTraffic(req.method, req.originalUrl, response.status, startTime, parsedReqLog, parsedResLog);
+        res.status(garenaResponse.status).send(resBuffer);
+
+        // --- 📥 3. BACKGROUND PYTHON DECODING (Game free ho chuki hai) ---
+        processAndLog(req.method, req.originalUrl, req.query, reqBuffer, resBuffer, garenaResponse.status, startTime);
 
     } catch (e) {
         if (!res.headersSent) res.status(502).send("GATEWAY ERROR");
-        logTraffic(req.method, req.originalUrl, 502, startTime, parsedReqLog, "[GATEWAY FAILED] " + e.message);
+        processAndLog(req.method, req.originalUrl, req.query, reqBuffer, Buffer.from(e.message), 502, startTime);
     }
 });
+
+// 🔥 Ye function background me chalta hai taake UI aur DB me data save ho
+async function processAndLog(method, originalUrl, query, reqBuffer, resBuffer, status, startTime) {
+    let parsedReqLog = "[EMPTY OR RAW BINARY]";
+    let parsedResLog = "[EMPTY OR RAW BINARY]";
+
+    const matchedRouteKey = Object.keys(PROTO_ROUTES).find(key => originalUrl.includes(key));
+    const routeConfig = matchedRouteKey ? PROTO_ROUTES[matchedRouteKey] : null;
+
+    // A. Parse Request
+    if (reqBuffer.length > 0) {
+        let bufferToProcess = reqBuffer;
+        if (routeConfig && routeConfig.encrypt) {
+            const decrypted = smartDecrypt(reqBuffer);
+            if (decrypted) bufferToProcess = decrypted;
+        }
+
+        if (routeConfig && routeConfig.req) {
+            parsedReqLog = await decodeWithPython(routeConfig.req, bufferToProcess);
+        } else {
+            let tryString = bufferToProcess.toString('utf8');
+            if (/^[\x20-\x7E]*$/.test(tryString) && tryString.length > 5) parsedReqLog = tryString.slice(0, 3000);
+            else parsedReqLog = `[RAW BINARY] Size: ${bufferToProcess.length}\n[HEX] ${bufferToProcess.toString('hex').match(/.{1,32}/g)?.join('\n') || ''}`;
+        }
+    } else if (Object.keys(query).length > 0) {
+        parsedReqLog = JSON.stringify(query, null, 2);
+    }
+
+    // B. Parse Response
+    if (resBuffer.length > 0) {
+        if (routeConfig && routeConfig.res) {
+            parsedResLog = await decodeWithPython(routeConfig.res, resBuffer);
+        } else {
+            try {
+                parsedResLog = JSON.stringify(JSON.parse(resBuffer.toString('utf8')), null, 2);
+            } catch {
+                let text = resBuffer.toString('utf8');
+                if (/^[\x20-\x7E\n\r]*$/.test(text) && text.length > 5) parsedResLog = text.length < 5000 ? text : `[TEXT RESPONSE] Size: ${resBuffer.length}`;
+                else parsedResLog = `[RAW BINARY RESPONSE] Size: ${resBuffer.length}\n[HEX] ${resBuffer.toString('hex').match(/.{1,32}/g)?.join('\n') || ''}`;
+            }
+        }
+    }
+
+    // C. Save to Buffer
+    requestLogsBuffer.push({
+        id: Date.now() + '-' + Math.floor(Math.random()*10000),
+        timestamp: new Date().toLocaleTimeString(),
+        method, path: originalUrl, status,
+        duration: `${Date.now() - startTime}ms`,
+        req: parsedReqLog, res: parsedResLog
+    });
+    if (requestLogsBuffer.length > 2000) requestLogsBuffer.shift();
+}
 
 app.listen(process.env.PORT || 3000);
