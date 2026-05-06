@@ -5,12 +5,15 @@ const crypto = require('crypto');
 const app = express();
 app.use(cors());
 
-// 🔥 RAW BODY CAPTURE
+// 🔥 RAW BODY CAPTURE FOR SNIFFING
 app.use(express.raw({ type: '*/*', limit: '500mb' }));
 
-// 🌐 GARENA SERVERS
-const GARENA_LOGIN_API = 'loginbp.ggpolarbear.com';
-const GARENA_CLIENT_API = 'clientbp.ggpolarbear.com'; 
+// 🌐 GARENA MASTER SERVERS
+const SERVERS = {
+    LOGIN: 'loginbp.ggpolarbear.com',
+    CLIENT: 'clientbp.ggpolarbear.com',
+    DL: 'dl.castle.freefiremobile.com' // Naya CDN Server
+};
 
 const PYTHON_API = 'https://protos-gray.vercel.app/api/decode'; 
 
@@ -21,38 +24,28 @@ const ALGO    = 'aes-128-cbc';
 let requestLogsBuffer = []; 
 
 // ==========================================
-// 🗺️ 1. THE ULTIMATE ROUTER MAP (All FF Endpoints)
+// 🗺️ 1. THE SNIFFER ROUTER MAP
 // ==========================================
-const PROTO_ROUTES = {
-    // --- 🟢 LOGIN & AUTH (loginbp) ---
-    'MajorLogin': { req: 'LoginReq', res: 'LoginRes', encrypt: true, target: GARENA_LOGIN_API },
-    'PlatformRegister': { req: 'PlatformRegisterReq', res: null, encrypt: false, target: GARENA_LOGIN_API },
-    'GetAccountBriefInfoBeforeLogin': { req: null, res: null, encrypt: true, target: GARENA_LOGIN_API },
-    'Ping': { req: null, res: null, encrypt: true, target: GARENA_LOGIN_API },
+// Yahan hum define kar rahe hain ke konsi request kis server par jani chahiye
+const ROUTE_MAP = {
+    // Login & Auth
+    'MajorLogin': { req: 'LoginReq', res: 'LoginRes', encrypt: true, target: SERVERS.LOGIN },
+    'PlatformRegister': { req: 'PlatformRegisterReq', res: null, encrypt: false, target: SERVERS.LOGIN },
+    'GetAccountBriefInfoBeforeLogin': { req: null, res: null, encrypt: true, target: SERVERS.LOGIN },
+    'Ping': { req: null, res: null, encrypt: true, target: SERVERS.LOGIN },
 
-    // --- 🔵 PROFILE & SOCIAL (clientbp) ---
-    'GetPlayerPersonalShow': { req: 'GetPlayerPersonalShow', res: 'AccountPersonalShowInfo', encrypt: false, target: GARENA_CLIENT_API },
-    'GetPlayerProfile': { req: null, res: null, encrypt: true, target: GARENA_CLIENT_API },
-    'SearchWorkshopCode': { req: 'SearchWorkshopCode', res: null, encrypt: false, target: GARENA_CLIENT_API },
-    'like': { req: 'like', res: 'Info', encrypt: false, target: GARENA_CLIENT_API },
-    'GetFriendList': { req: null, res: null, encrypt: true, target: GARENA_CLIENT_API },
+    // Game Client & Inventory
+    'GetPlayerPersonalShow': { req: 'GetPlayerPersonalShow', res: 'AccountPersonalShowInfo', encrypt: false, target: SERVERS.CLIENT },
+    'GetPlayerProfile': { req: null, res: null, encrypt: true, target: SERVERS.CLIENT },
+    'SearchWorkshopCode': { req: 'SearchWorkshopCode', res: null, encrypt: false, target: SERVERS.CLIENT },
+    'like': { req: 'like', res: 'Info', encrypt: false, target: SERVERS.CLIENT },
+    'GetFriendList': { req: null, res: null, encrypt: true, target: SERVERS.CLIENT },
+    'GetVault': { req: null, res: null, encrypt: true, target: SERVERS.CLIENT },
+    'SyncInventory': { req: null, res: null, encrypt: true, target: SERVERS.CLIENT },
     
-    // --- 🟣 INVENTORY, SUITS & VAULT (clientbp) ---
-    'GetVault': { req: null, res: null, encrypt: true, target: GARENA_CLIENT_API },
-    'SyncInventory': { req: null, res: null, encrypt: true, target: GARENA_CLIENT_API },
-    'UpdateLoadout': { req: null, res: null, encrypt: true, target: GARENA_CLIENT_API },
-    'EquipItem': { req: null, res: null, encrypt: true, target: GARENA_CLIENT_API },
-    'GetPetList': { req: null, res: null, encrypt: true, target: GARENA_CLIENT_API },
-
-    // --- 🟡 MATCH & GAMEPLAY (clientbp) ---
-    'Matchmaking': { req: null, res: null, encrypt: true, target: GARENA_CLIENT_API },
-    'FetchMatchHistory': { req: null, res: null, encrypt: true, target: GARENA_CLIENT_API },
-    'GetLeaderboard': { req: null, res: null, encrypt: true, target: GARENA_CLIENT_API },
-    
-    // --- 🟠 SHOP & REWARDS (clientbp) ---
-    'StoreCategory': { req: null, res: null, encrypt: true, target: GARENA_CLIENT_API },
-    'ClaimMail': { req: null, res: null, encrypt: true, target: GARENA_CLIENT_API },
-    'GetEvents': { req: null, res: null, encrypt: true, target: GARENA_CLIENT_API }
+    // Downloads & Updates (Naya Server)
+    'ABHotUpdates': { req: null, res: null, encrypt: false, target: SERVERS.DL },
+    'common': { req: null, res: null, encrypt: false, target: SERVERS.DL }
 };
 
 // ==========================================
@@ -88,36 +81,7 @@ async function decodeWithPython(msgName, buffer) {
 }
 
 // ==========================================
-// 🛡️ 3. LOCAL MOCKS (VER.PHP)
-// ==========================================
-const LOCAL_RESPONSES = {
-    "/ver.php": {
-        status: 200, type: 'application/json',
-        data: Buffer.from(JSON.stringify({
-            "code": 0, "is_server_open": true, "is_firewall_open": false,
-            "cdn_url": "https://dl.gmc.freefiremobile.com/live/ABHotUpdates/",
-            "backup_cdn_url": "https://dl.gmc.freefiremobile.com/live/ABHotUpdates/",
-            "abhotupdate_cdn_url": "https://core-gmc.freefiremobile.com/live/ABHotUpdates/",
-            "img_cdn_url": "https://dl.gmc.freefiremobile.com/common/",
-            "login_download_optionalpack": "optionalclothres:shaders|optionalpetres:optionalpetres_commonab_shader|optionallobbyres:",
-            "need_track_hotupdate": true, "abhotupdate_check": "cache_res;assetindexer;SH-Gpp",
-            "latest_release_version": "OB53", "min_hint_size": 1, "space_required_in_GB": 1.48,
-            "should_check_ab_load": false, "force_refresh_restype": "optionalavatarres",
-            "remote_version": "1.123.10", "server_url": "https://rm-proxy-intercept.vercel.app/", 
-            "is_review_server": false, "use_login_optional_download": true,
-            "use_background_download": true, "use_background_download_lobby": true,
-            "country_code": "SG", "client_ip": "15.235.211.216", "gdpr_version": 0,
-            "billboard_msg": "👑 KING AURORA V7: FULL INVENTORY CATCHER",
-            "core_url": "csoversea.castle.freefiremobile.com",
-            "core_ip_list": ["0.0.0.0", "50.109.27.134", "129.226.2.163"],
-            "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefireth",
-            "garena_login": false, "garena_hint": false
-        }))
-    }
-};
-
-// ==========================================
-// 🚀 4. API & DASHBOARD ROUTES
+// 🚀 3. API & DASHBOARD ROUTES
 // ==========================================
 app.get('/api/internal/logs/sync', (req, res) => {
     const logsToSend = [...requestLogsBuffer];
@@ -126,7 +90,7 @@ app.get('/api/internal/logs/sync', (req, res) => {
 app.post('/api/internal/clear', (req, res) => { requestLogsBuffer = []; res.json({ success: true }); });
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// 👑 5. THE HYBRID DASHBOARD UI
+// 👑 4. THE SNIFFER DASHBOARD
 app.get('/romeo/ds', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -134,7 +98,7 @@ app.get('/romeo/ds', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <title>👑 King Nexus | V7 Ultimate Engine</title>
+        <title>👑 King Nexus | V8 Sniffer Engine</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
         <style>
@@ -153,10 +117,10 @@ app.get('/romeo/ds', (req, res) => {
             <header class="flex flex-col md:flex-row justify-between items-center pb-4 mb-4 border-b border-purple-500/20 gap-4">
                 <div class="flex items-center gap-4">
                     <div class="p-3 bg-purple-900/30 rounded-lg aurora-glow">
-                        <h1 class="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 tracking-widest uppercase" style="font-family: 'Orbitron', sans-serif;">KING_NEXUS V7</h1>
+                        <h1 class="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 tracking-widest uppercase" style="font-family: 'Orbitron', sans-serif;">KING_NEXUS V8</h1>
                         <div class="flex items-center gap-2 mt-1">
-                            <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
-                            <p id="storage-status" class="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">⚡ LISTENING TO CLIENTBP</p>
+                            <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                            <p id="storage-status" class="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">⚡ PURE MITM SNIFFER MODE</p>
                         </div>
                     </div>
                 </div>
@@ -170,8 +134,8 @@ app.get('/romeo/ds', (req, res) => {
         </div>
 
         <script>
-            const db = new Dexie("NexusV7DB");
-            db.version(1).stores({ logs: 'id, timestamp, method, path, status, duration' });
+            const db = new Dexie("NexusV8DB");
+            db.version(1).stores({ logs: 'id, timestamp, method, targetHost, path, status, duration' });
 
             async function syncServerData() {
                 try {
@@ -179,14 +143,9 @@ app.get('/romeo/ds', (req, res) => {
                     const newLogs = await res.json();
                     if(newLogs.length > 0) { 
                         await db.logs.bulkPut(newLogs); 
-                        const isSearching = document.getElementById('searchBox').value.trim() !== "";
-                        if(!isSearching) {
-                            appendNewLogs(newLogs); 
-                        } else {
-                            fullRender(); 
-                        }
-                        const count = await db.logs.count();
-                        document.getElementById('storage-status').innerText = count + " LOGS IN VAULT";
+                        if(document.getElementById('searchBox').value.trim() === "") appendNewLogs(newLogs); 
+                        else fullRender(); 
+                        document.getElementById('storage-status').innerText = (await db.logs.count()) + " LOGS INTERCEPTED";
                     }
                 } catch(e) {}
             }
@@ -200,7 +159,7 @@ app.get('/romeo/ds', (req, res) => {
                     <div class="flex justify-between items-center mb-3 pb-2 border-b border-white/5 gap-2">
                         <div class="flex items-center gap-2">
                             <span class="text-white font-black text-[10px] bg-white/10 px-2 py-1 rounded">\${log.method}</span>
-                            <span class="text-blue-300 font-bold text-xs break-all">\${log.path}</span>
+                            <span class="text-blue-300 font-bold text-xs break-all">[\${log.targetHost}] \${log.path}</span>
                         </div>
                         <div class="flex items-center gap-3">
                             <span class="text-gray-500 text-[9px] font-bold">\${log.timestamp} | \${log.duration}</span>
@@ -220,35 +179,18 @@ app.get('/romeo/ds', (req, res) => {
                 </div>\`;
             }
 
-            function appendNewLogs(newLogs) {
-                const container = document.getElementById('logs-container');
-                const html = newLogs.map(generateLogHTML).join('');
-                container.insertAdjacentHTML('afterbegin', html); 
-            }
-
+            function appendNewLogs(newLogs) { document.getElementById('logs-container').insertAdjacentHTML('afterbegin', newLogs.map(generateLogHTML).join('')); }
             async function fullRender() {
                 const term = document.getElementById('searchBox').value.toLowerCase();
                 let logs = await db.logs.orderBy('id').reverse().toArray();
-                if(term) logs = logs.filter(l => l.path.toLowerCase().includes(term) || String(l.status).includes(term));
+                if(term) logs = logs.filter(l => l.path.toLowerCase().includes(term) || String(l.status).includes(term) || l.targetHost.toLowerCase().includes(term));
                 document.getElementById('logs-container').innerHTML = logs.map(generateLogHTML).join('');
             }
-
-            async function nukeEverything() { 
-                await fetch('/api/internal/clear', { method: 'POST' }); 
-                await db.logs.clear(); 
-                document.getElementById('logs-container').innerHTML = ''; 
-                document.getElementById('storage-status').innerText = "0 LOGS IN VAULT";
-            }
-
+            async function nukeEverything() { await fetch('/api/internal/clear', { method: 'POST' }); await db.logs.clear(); document.getElementById('logs-container').innerHTML = ''; }
             async function copyAllLogs(btn) {
                 const allLogs = await db.logs.orderBy('id').reverse().toArray();
-                if(allLogs.length === 0) return;
-                navigator.clipboard.writeText(JSON.stringify(allLogs, null, 2)).then(() => {
-                    const orig = btn.innerText; btn.innerText = '✅ COPIED';
-                    setTimeout(() => btn.innerText = orig, 2000);
-                });
+                if(allLogs.length) navigator.clipboard.writeText(JSON.stringify(allLogs, null, 2)).then(() => { btn.innerText = '✅ COPIED'; setTimeout(() => btn.innerText = '📋 COPY ALL', 2000); });
             }
-
             setInterval(syncServerData, 1000); fullRender(); 
         </script>
     </body>
@@ -257,7 +199,7 @@ app.get('/romeo/ds', (req, res) => {
 });
 
 // ==========================================
-// 🌌 6. CATCH-ALL ASYNC PROXY INTERCEPTOR
+// 🌌 5. CATCH-ALL ASYNC PURE MITM INTERCEPTOR
 // ==========================================
 app.all('*', async (req, res) => {
     if (req.path === '/') return res.redirect('/romeo/ds');
@@ -265,39 +207,62 @@ app.all('*', async (req, res) => {
     const startTime = Date.now();
     let reqBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
 
-    // --- 🛑 1. CHECK LOCAL BYPASS ---
-    const localRule = Object.keys(LOCAL_RESPONSES).find(p => req.originalUrl.includes(p));
-    if (localRule) {
-        const mock = LOCAL_RESPONSES[localRule];
-        res.setHeader('Content-Type', mock.type);
-        res.status(mock.status).send(mock.data); 
+    // --- 🛑 1. CHECK LOCAL BYPASS (MANDATORY FOR GAME TO START) ---
+    if (req.originalUrl.includes('/ver.php')) {
+        const mockData = {
+            "code": 0, "is_server_open": true, "is_firewall_open": false,
+            "cdn_url": "https://dl.gmc.freefiremobile.com/live/ABHotUpdates/",
+            "backup_cdn_url": "https://dl.gmc.freefiremobile.com/live/ABHotUpdates/",
+            "abhotupdate_cdn_url": "https://core-gmc.freefiremobile.com/live/ABHotUpdates/",
+            "img_cdn_url": "https://dl.gmc.freefiremobile.com/common/",
+            "login_download_optionalpack": "optionalclothres:shaders|optionalpetres:optionalpetres_commonab_shader|optionallobbyres:",
+            "need_track_hotupdate": true, "abhotupdate_check": "cache_res;assetindexer;SH-Gpp",
+            "latest_release_version": "OB53", "min_hint_size": 1, "space_required_in_GB": 1.48,
+            "should_check_ab_load": false, "force_refresh_restype": "optionalavatarres",
+            "remote_version": "1.123.10", "server_url": "https://rm-proxy-intercept.vercel.app/", 
+            "is_review_server": false, "use_login_optional_download": true,
+            "use_background_download": true, "use_background_download_lobby": true,
+            "country_code": "SG", "client_ip": "15.235.211.216", "gdpr_version": 0,
+            "billboard_msg": "👑 KING AURORA V8: MITM SNIFFER",
+            "core_url": "csoversea.castle.freefiremobile.com",
+            "core_ip_list": ["0.0.0.0", "50.109.27.134", "129.226.2.163"],
+            "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefireth",
+            "garena_login": false, "garena_hint": false
+        };
+        res.setHeader('Content-Type', 'application/json');
+        res.status(200).json(mockData); 
         
         requestLogsBuffer.push({
             id: Date.now() + '-' + Math.floor(Math.random()*10000), timestamp: new Date().toLocaleTimeString(),
-            method: req.method, path: req.originalUrl, status: mock.status, duration: `${Date.now() - startTime}ms`,
+            method: req.method, targetHost: 'loginbp.ggpolarbear.com', path: req.originalUrl, status: 200, duration: `${Date.now() - startTime}ms`,
             req: Object.keys(req.query).length > 0 ? JSON.stringify(req.query, null, 2) : "LOCAL BYPASS TRIGGERED", 
-            res: JSON.stringify(JSON.parse(mock.data.toString()), null, 2)
+            res: JSON.stringify(mockData, null, 2)
         });
         return;
     }
 
-    // --- 🌐 2. DYNAMIC ROUTING & FORWARD TO GARENA ---
-    try {
-        let pathUrl = req.originalUrl.replace(/^\//, ''); 
-        
-        // Auto-Router
-        const matchedRouteKey = Object.keys(PROTO_ROUTES).find(key => req.originalUrl.includes(key));
-        const routeConfig = matchedRouteKey ? PROTO_ROUTES[matchedRouteKey] : null;
-        
-        // Agar endpoint unknown hai toh default usko clientbp (Inventory server) bhejo kyun ke post-login traffic zyada hoti hai
-        const targetHost = (routeConfig && routeConfig.target) ? routeConfig.target : GARENA_CLIENT_API;
-        const targetUrl = `https://${targetHost}/${pathUrl}`;
+    // --- 🌐 2. DYNAMIC HOST DETECTION ---
+    let pathUrl = req.originalUrl.replace(/^\//, ''); 
+    const matchedRouteKey = Object.keys(ROUTE_MAP).find(key => req.originalUrl.includes(key));
+    const routeConfig = matchedRouteKey ? ROUTE_MAP[matchedRouteKey] : null;
+    
+    // Agar humein route nahi mila, to hum assume karenge ye Client API hai (Inventory etc)
+    let targetHost = (routeConfig && routeConfig.target) ? routeConfig.target : SERVERS.CLIENT;
+    
+    // Agar request HttpCanary se aayi hai aur usne asli Host header bheja hai (like dl.castle.freefiremobile.com)
+    if (req.headers['x-target-host']) {
+        targetHost = req.headers['x-target-host'];
+    }
 
+    const targetUrl = `https://${targetHost}/${pathUrl}`;
+
+    try {
         const headers = { ...req.headers };
         headers['host'] = targetHost; 
         delete headers['accept-encoding']; 
         headers['x-forwarded-for'] = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
+        // --- ⏩ 3. FORWARD TO TRUE DESTINATION ---
         const garenaResponse = await fetch(targetUrl, {
             method: req.method, headers: headers,
             body: (req.method !== 'GET' && req.method !== 'HEAD' && reqBuffer.length > 0) ? reqBuffer : undefined
@@ -305,28 +270,29 @@ app.all('*', async (req, res) => {
 
         const resBuffer = Buffer.from(await garenaResponse.arrayBuffer());
 
+        // Send back to game untouched
         garenaResponse.headers.forEach((v, n) => {
             if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(n.toLowerCase())) res.setHeader(n, v);
         });
         res.status(garenaResponse.status).send(resBuffer);
 
-        // --- 📥 3. BACKGROUND PYTHON DECODING ---
-        processAndLog(req.method, req.originalUrl, req.query, reqBuffer, resBuffer, garenaResponse.status, startTime, routeConfig);
+        // --- 📥 4. BACKGROUND DECODING & LOGGING ---
+        processAndLog(req.method, targetHost, req.originalUrl, req.query, reqBuffer, resBuffer, garenaResponse.status, startTime, routeConfig);
 
     } catch (e) {
         if (!res.headersSent) res.status(502).send("GATEWAY ERROR");
-        processAndLog(req.method, req.originalUrl, req.query, reqBuffer, Buffer.from(e.message), 502, startTime, null);
+        processAndLog(req.method, targetHost, req.originalUrl, req.query, reqBuffer, Buffer.from(e.message), 502, startTime, null);
     }
 });
 
-async function processAndLog(method, originalUrl, query, reqBuffer, resBuffer, status, startTime, routeConfig) {
+async function processAndLog(method, targetHost, originalUrl, query, reqBuffer, resBuffer, status, startTime, routeConfig) {
     let parsedReqLog = "[EMPTY OR RAW BINARY]";
     let parsedResLog = "[EMPTY OR RAW BINARY]";
 
-    // Request Parse
+    // Request Decode
     if (reqBuffer.length > 0) {
         let bufferToProcess = reqBuffer;
-        if ((routeConfig && routeConfig.encrypt) || !routeConfig) { // Unmapped ko bhi decrypt check karo
+        if ((routeConfig && routeConfig.encrypt) || !routeConfig) { 
             const decrypted = smartDecrypt(reqBuffer);
             if (decrypted) bufferToProcess = decrypted;
         }
@@ -342,7 +308,7 @@ async function processAndLog(method, originalUrl, query, reqBuffer, resBuffer, s
         parsedReqLog = JSON.stringify(query, null, 2);
     }
 
-    // Response Parse
+    // Response Decode
     if (resBuffer.length > 0) {
         if (routeConfig && routeConfig.res) {
             parsedResLog = await decodeWithPython(routeConfig.res, resBuffer);
@@ -360,7 +326,7 @@ async function processAndLog(method, originalUrl, query, reqBuffer, resBuffer, s
     requestLogsBuffer.push({
         id: Date.now() + '-' + Math.floor(Math.random()*10000),
         timestamp: new Date().toLocaleTimeString(),
-        method, path: originalUrl, status,
+        method, targetHost, path: originalUrl, status,
         duration: `${Date.now() - startTime}ms`,
         req: parsedReqLog, res: parsedResLog
     });
