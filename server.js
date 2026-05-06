@@ -5,7 +5,6 @@ const protobuf = require('protobufjs');
 
 const app = express();
 app.use(cors());
-// 🚀 500MB Limit taake koi bhi bari file ya update request fail na ho
 app.use(express.raw({ type: '*/*', limit: '500mb' })); 
 
 const GARENA_API = 'https://loginbp.ggpolarbear.com';
@@ -14,7 +13,6 @@ const AES_KEY = Buffer.from('Yg&tc%DEuh6%Zc^8', 'utf8');
 const AES_IV  = Buffer.from('6oyZDr22E3ychjM%', 'utf8');
 const ALGO    = 'aes-128-cbc';
 
-// Ye buffer hai, jab browser data le lega to ye khali ho jayega (Server memory hamesha free)
 let requestLogsBuffer = []; 
 let MajorLoginReq, MajorLoginRes;
 
@@ -25,7 +23,7 @@ protobuf.load("MajorLoginReq.proto").then(r => MajorLoginReq = r.lookupType("Maj
 protobuf.load("MajorLoginRes.proto").then(r => MajorLoginRes = r.lookupType("MajorLoginRes")).catch(() => {});
 
 // ==========================================
-// 🛠️ 2. CRYPTO ENGINE
+// 🛠️ 2. CRYPTO & LOGGING
 // ==========================================
 function decryptRequest(buffer) {
     try {
@@ -43,12 +41,53 @@ function logTraffic(method, path, status, startTime, reqData, resData) {
         req: reqData, res: resData
     };
     requestLogsBuffer.push(newLog); 
-    // Failsafe limit just in case nobody opens the dashboard
     if (requestLogsBuffer.length > 2000) requestLogsBuffer.shift(); 
 }
 
 // ==========================================
-// 🚀 3. API & DASHBOARD ROUTES
+// 🛡️ 3. LOCAL MOCKS (VER.PHP BYPASS ADDED BACK)
+// ==========================================
+const LOCAL_RESPONSES = {
+    "/ver.php": {
+        status: 200,
+        type: 'application/json',
+        data: Buffer.from(JSON.stringify({
+            "code": 0,
+            "is_server_open": true,
+            "is_firewall_open": false,
+            "cdn_url": "https://dl.gmc.freefiremobile.com/live/ABHotUpdates/",
+            "backup_cdn_url": "https://dl.gmc.freefiremobile.com/live/ABHotUpdates/",
+            "abhotupdate_cdn_url": "https://core-gmc.freefiremobile.com/live/ABHotUpdates/",
+            "img_cdn_url": "https://dl.gmc.freefiremobile.com/common/",
+            "login_download_optionalpack": "optionalclothres:shaders|optionalpetres:optionalpetres_commonab_shader|optionallobbyres:",
+            "need_track_hotupdate": true,
+            "abhotupdate_check": "cache_res;assetindexer;SH-Gpp",
+            "latest_release_version": "OB53",
+            "min_hint_size": 1,
+            "space_required_in_GB": 1.48,
+            "should_check_ab_load": false,
+            "force_refresh_restype": "optionalavatarres",
+            "remote_version": "1.123.10", 
+            "server_url": "https://rm-proxy-intercept.vercel.app/", 
+            "is_review_server": false,
+            "use_login_optional_download": true,
+            "use_background_download": true,
+            "use_background_download_lobby": true,
+            "country_code": "SG",
+            "client_ip": "15.235.211.216",
+            "gdpr_version": 0,
+            "billboard_msg": "👑 KING AURORA: OFFICIAL APK BYPASSED",
+            "core_url": "csoversea.castle.freefiremobile.com",
+            "core_ip_list": ["0.0.0.0", "50.109.27.134", "129.226.2.163"],
+            "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefireth",
+            "garena_login": false,
+            "garena_hint": false
+        }))
+    }
+};
+
+// ==========================================
+// 🚀 4. API & DASHBOARD ROUTES
 // ==========================================
 app.get('/', (req, res) => {
     res.send(`
@@ -62,10 +101,9 @@ app.get('/', (req, res) => {
     `);
 });
 
-// Smart Sync: Browser data mangega, aur server yahan se flush kar dega taake ram free ho jaye
 app.get('/api/internal/logs/sync', (req, res) => {
     const logsToSend = [...requestLogsBuffer];
-    requestLogsBuffer = []; // Clear server ram instantly
+    requestLogsBuffer = []; 
     res.json(logsToSend);
 });
 
@@ -74,10 +112,12 @@ app.post('/api/internal/clear', (req, res) => {
     res.json({ success: true }); 
 });
 
+// Ignores useless image requests to keep logs clean
 app.get('/favicon.ico', (req, res) => res.status(204).end());
+app.get('/favicon.png', (req, res) => res.status(204).end());
 
 // ==========================================
-// 👑 4. THE PRO DASHBOARD (HTML/JS)
+// 👑 5. THE PRO DASHBOARD (HTML/JS)
 // ==========================================
 app.get('/romeo/ds', (req, res) => {
     res.send(`
@@ -103,7 +143,6 @@ app.get('/romeo/ds', (req, res) => {
     </head>
     <body class="min-h-screen p-2 sm:p-4 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/10 via-[#030008] to-black">
         <div class="max-w-[95%] mx-auto">
-            
             <header class="flex flex-col md:flex-row justify-between items-center pb-4 mb-4 border-b border-purple-500/20 gap-4">
                 <div class="flex items-center gap-4">
                     <div class="p-3 bg-purple-900/30 rounded-lg aurora-glow">
@@ -114,23 +153,17 @@ app.get('/romeo/ds', (req, res) => {
                         </div>
                     </div>
                 </div>
-                
                 <div class="flex flex-wrap gap-2 items-center justify-center">
                     <input type="text" id="searchBox" oninput="filterLogs()" placeholder="🔍 Search path, status..." class="px-3 py-2 bg-black/50 border border-purple-500/30 rounded-md text-xs text-white focus:outline-none focus:border-purple-500 w-48">
-                    
                     <button onclick="downloadJSON()" class="px-3 py-2 bg-blue-900/30 text-blue-300 border border-blue-500/50 hover:bg-blue-600 hover:text-white transition-all text-[10px] font-black rounded-md tracking-wider">💾 EXPORT</button>
-                    
                     <button onclick="copyAllLogs(this)" class="px-3 py-2 bg-purple-900/30 text-purple-300 border border-purple-500/50 hover:bg-purple-600 hover:text-white transition-all text-[10px] font-black rounded-md tracking-wider aurora-glow">📋 COPY ALL</button>
-                    
                     <button onclick="nukeEverything()" class="px-3 py-2 bg-red-950 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white transition-all text-[10px] font-black rounded-md tracking-wider">🗑️ NUKE</button>
                 </div>
             </header>
-
             <div id="logs-container" class="space-y-4"></div>
         </div>
 
         <script>
-            // 💾 INITIALIZE INDEXED_DB
             const db = new Dexie("NexusProDB");
             db.version(1).stores({ logs: 'id, timestamp, method, path, status, duration' });
             let currentLogs = [];
@@ -186,7 +219,7 @@ app.get('/romeo/ds', (req, res) => {
             async function updateUI() {
                 currentLogs = await db.logs.orderBy('id').reverse().toArray();
                 document.getElementById('storage-status').innerText = currentLogs.length + " LOGS SECURED IN VAULT";
-                filterLogs(); // Re-render keeping search in mind
+                filterLogs(); 
             }
 
             function renderLogsHTML(logsArray) {
@@ -200,7 +233,7 @@ app.get('/romeo/ds', (req, res) => {
                     let borderClass = isError ? 'border-red-500/30' : 'border-purple-500/20 aurora-glow';
                     
                     html += \`
-                    <div class="glass-panel rounded-xl p-4 transition-all hover:border-purple-500/50">
+                    <div class="glass-panel rounded-xl p-4 transition-all hover:border-purple-500/50 \${borderClass}">
                         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 pb-2 border-b border-white/5 gap-2">
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="text-white font-black text-[10px] bg-white/10 px-2 py-1 rounded border border-white/10">\${log.method}</span>
@@ -214,11 +247,11 @@ app.get('/romeo/ds', (req, res) => {
                         <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
                             <div class="relative group">
                                 <div class="absolute -top-2 left-3 bg-[#0a0a0f] text-gray-400 text-[8px] font-black px-2 py-0.5 rounded border border-gray-700/50 z-10">REQUEST</div>
-                                <div class="p-3 bg-[#050508] rounded-lg border border-white/5 h-40 overflow-y-auto mt-1"><pre class="text-purple-300/80 group-hover:text-purple-300 transition-colors">\${log.req}</pre></div>
+                                <div class="p-3 bg-[#050508] rounded-lg border border-white/5 h-40 overflow-y-auto mt-1 custom-scroll"><pre class="text-purple-300/80 group-hover:text-purple-300 transition-colors">\${log.req}</pre></div>
                             </div>
                             <div class="relative group">
                                 <div class="absolute -top-2 left-3 bg-[#0a0a0f] text-gray-400 text-[8px] font-black px-2 py-0.5 rounded border border-gray-700/50 z-10">RESPONSE</div>
-                                <div class="p-3 bg-[#050508] rounded-lg border border-white/5 h-40 overflow-y-auto mt-1"><pre class="\${isError ? 'text-red-300/80' : 'text-emerald-300/80'} group-hover:brightness-125 transition-colors">\${log.res}</pre></div>
+                                <div class="p-3 bg-[#050508] rounded-lg border border-white/5 h-40 overflow-y-auto mt-1 custom-scroll"><pre class="\${isError ? 'text-red-300/80' : 'text-emerald-300/80'} group-hover:brightness-125 transition-colors">\${log.res}</pre></div>
                             </div>
                         </div>
                     </div>\`;
@@ -226,9 +259,8 @@ app.get('/romeo/ds', (req, res) => {
                 container.innerHTML = html;
             }
 
-            // 🚀 FAST BACKGROUND SYNC (Every 1.5 seconds to save battery/cpu)
             setInterval(syncServerData, 1500);
-            updateUI(); // Initial load
+            updateUI(); 
         </script>
     </body>
     </html>
@@ -236,7 +268,7 @@ app.get('/romeo/ds', (req, res) => {
 });
 
 // ==========================================
-// 🌌 5. CATCH-ALL PROXY INTERCEPTOR (REAL TRAFFIC ONLY)
+// 🌌 6. CATCH-ALL PROXY INTERCEPTOR (REAL TRAFFIC & MOCKS)
 // ==========================================
 app.all('*', async (req, res) => {
     const startTime = Date.now();
@@ -244,7 +276,26 @@ app.all('*', async (req, res) => {
     let parsedReqLog = "[EMPTY OR RAW BINARY]";
     let parsedResLog = "[EMPTY OR RAW BINARY]";
 
-    // --- INTERCEPT & PARSE REQUEST ---
+    // --- 🛑 CHECK LOCAL BYPASS FIRST (MOCK) ---
+    const localRule = Object.keys(LOCAL_RESPONSES).find(p => req.originalUrl.includes(p));
+    if (localRule) {
+        const mock = LOCAL_RESPONSES[localRule];
+        
+        // Agar query parameters aaye hain to unhe request log me dikhaye
+        if (Object.keys(req.query).length > 0) {
+            parsedReqLog = JSON.stringify(req.query, null, 2);
+        } else {
+            parsedReqLog = "LOCAL BYPASS TRIGGERED";
+        }
+
+        res.setHeader('Content-Type', mock.type);
+        res.status(mock.status).send(mock.data);
+        
+        logTraffic(req.method, req.originalUrl, mock.status, startTime, parsedReqLog, JSON.stringify(JSON.parse(mock.data.toString()), null, 2));
+        return; // Yahan ruk jao, real server par na bhejo
+    }
+
+    // --- INTERCEPT & PARSE REQUEST (IF NOT MOCKED) ---
     if (reqBuffer.length > 0) {
         if (req.path.includes('MajorLogin')) {
             const decryptedReq = decryptRequest(reqBuffer);
@@ -305,7 +356,6 @@ app.all('*', async (req, res) => {
             }
         }
 
-        // Send back to client safely
         response.headers.forEach((v, n) => {
             if (!['content-encoding', 'content-length', 'transfer-encoding'].includes(n.toLowerCase())) {
                 res.setHeader(n, v);
