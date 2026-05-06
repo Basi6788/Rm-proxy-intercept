@@ -5,13 +5,14 @@ const crypto = require('crypto');
 const app = express();
 app.use(cors());
 
-// 🔥 RAW BODY CAPTURE
+// 🔥 RAW BODY CAPTURE (Har bari request pakarne ke liye)
 app.use(express.raw({ type: '*/*', limit: '500mb' }));
 
 // 🌐 GARENA SERVERS
 const GARENA_LOGIN_API = 'loginbp.ggpolarbear.com';
-const GARENA_CLIENT_API = 'clientbp.ggpolarbear.com'; // Inventory aur Suits wala server
+const GARENA_CLIENT_API = 'clientbp.ggpolarbear.com'; // Inventory, Suits, etc.
 
+// 🐍 TUMHARI PYTHON API (Decoding ke liye)
 const PYTHON_API = 'https://protos-gray.vercel.app/api/decode'; 
 
 const AES_KEY = Buffer.from('Yg&tc%DEuh6%Zc^8', 'utf8');
@@ -29,6 +30,10 @@ const PROTO_ROUTES = {
     'GetPlayerPersonalShow': { req: 'GetPlayerPersonalShow', res: 'AccountPersonalShowInfo', encrypt: false, target: GARENA_CLIENT_API },
     'SearchWorkshopCode': { req: 'SearchWorkshopCode', res: null, encrypt: false, target: GARENA_CLIENT_API },
     'like': { req: 'like', res: 'Info', encrypt: false, target: GARENA_CLIENT_API },
+    
+    // 🛑 NEW: ANTI-CHEAT / DEVICE INFO CATCHER
+    'GetAccountBriefInfoBeforeLogin': { req: null, res: null, encrypt: true, target: GARENA_LOGIN_API }, 
+    
     'Ping': { req: null, res: null, encrypt: true, target: GARENA_LOGIN_API }
 };
 
@@ -84,7 +89,7 @@ const LOCAL_RESPONSES = {
             "is_review_server": false, "use_login_optional_download": true,
             "use_background_download": true, "use_background_download_lobby": true,
             "country_code": "SG", "client_ip": "15.235.211.216", "gdpr_version": 0,
-            "billboard_msg": "👑 KING AURORA V6: SMART ROUTER",
+            "billboard_msg": "👑 KING AURORA V6.1: SMART ROUTER & ANTI-CHEAT CATCHER",
             "core_url": "csoversea.castle.freefiremobile.com",
             "core_ip_list": ["0.0.0.0", "50.109.27.134", "129.226.2.163"],
             "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefireth",
@@ -96,6 +101,7 @@ const LOCAL_RESPONSES = {
 // ==========================================
 // 🚀 4. API & DASHBOARD ROUTES
 // ==========================================
+app.get('/', (req, res) => res.redirect('/romeo/ds'));
 app.get('/api/internal/logs/sync', (req, res) => {
     const logsToSend = [...requestLogsBuffer];
     requestLogsBuffer = []; res.json(logsToSend);
@@ -103,7 +109,7 @@ app.get('/api/internal/logs/sync', (req, res) => {
 app.post('/api/internal/clear', (req, res) => { requestLogsBuffer = []; res.json({ success: true }); });
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// 👑 5. THE HYBRID DASHBOARD UI (Smart Render Fix)
+// 👑 5. THE HYBRID DASHBOARD UI
 app.get('/romeo/ds', (req, res) => {
     res.send(`
     <!DOCTYPE html>
@@ -111,7 +117,7 @@ app.get('/romeo/ds', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <title>👑 King Nexus | V6 Smart Engine</title>
+        <title>👑 King Nexus | V6.1 Smart Engine</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
         <style>
@@ -130,7 +136,7 @@ app.get('/romeo/ds', (req, res) => {
             <header class="flex flex-col md:flex-row justify-between items-center pb-4 mb-4 border-b border-purple-500/20 gap-4">
                 <div class="flex items-center gap-4">
                     <div class="p-3 bg-purple-900/30 rounded-lg aurora-glow">
-                        <h1 class="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 tracking-widest uppercase" style="font-family: 'Orbitron', sans-serif;">KING_NEXUS V6</h1>
+                        <h1 class="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-500 tracking-widest uppercase" style="font-family: 'Orbitron', sans-serif;">KING_NEXUS V6.1</h1>
                         <div class="flex items-center gap-2 mt-1">
                             <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                             <p id="storage-status" class="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">⚡ SMART ROUTING ACTIVE</p>
@@ -201,7 +207,7 @@ app.get('/romeo/ds', (req, res) => {
             function appendNewLogs(newLogs) {
                 const container = document.getElementById('logs-container');
                 const html = newLogs.map(generateLogHTML).join('');
-                container.insertAdjacentHTML('afterbegin', html); // Top par add karo bina redraw kiye
+                container.insertAdjacentHTML('afterbegin', html); 
             }
 
             async function fullRender() {
@@ -235,7 +241,7 @@ app.get('/romeo/ds', (req, res) => {
 });
 
 // ==========================================
-// 🌌 6. CATCH-ALL ASYNC PROXY INTERCEPTOR
+// 🌌 6. CATCH-ALL ASYNC PROXY INTERCEPTOR (0ms LAG)
 // ==========================================
 app.all('*', async (req, res) => {
     if (req.path === '/') return res.redirect('/romeo/ds');
@@ -259,15 +265,14 @@ app.all('*', async (req, res) => {
         return;
     }
 
-    // --- 🌐 2. DYNAMIC ROUTING & FORWARD TO GARENA ---
+    // --- 🌐 2. DYNAMIC ROUTING & FORWARD TO GARENA (NON-BLOCKING) ---
     try {
         let pathUrl = req.originalUrl.replace(/^\//, ''); 
         
-        // Auto-Router: Check karo request kis server ki hai
+        // Auto-Router
         const matchedRouteKey = Object.keys(PROTO_ROUTES).find(key => req.originalUrl.includes(key));
         const routeConfig = matchedRouteKey ? PROTO_ROUTES[matchedRouteKey] : null;
         
-        // Agar inventory ki request hui toh automatically clientbp par bhej dega
         const targetHost = (routeConfig && routeConfig.target) ? routeConfig.target : GARENA_LOGIN_API;
         const targetUrl = `https://${targetHost}/${pathUrl}`;
 
@@ -301,6 +306,7 @@ async function processAndLog(method, originalUrl, query, reqBuffer, resBuffer, s
     let parsedReqLog = "[EMPTY OR RAW BINARY]";
     let parsedResLog = "[EMPTY OR RAW BINARY]";
 
+    // Request Parse
     if (reqBuffer.length > 0) {
         let bufferToProcess = reqBuffer;
         if (routeConfig && routeConfig.encrypt) {
@@ -313,12 +319,13 @@ async function processAndLog(method, originalUrl, query, reqBuffer, resBuffer, s
         } else {
             let tryString = bufferToProcess.toString('utf8');
             if (/^[\x20-\x7E]*$/.test(tryString) && tryString.length > 5) parsedReqLog = tryString.slice(0, 3000);
-            else parsedReqLog = `[RAW BINARY] Size: ${bufferToProcess.length}`;
+            else parsedReqLog = `[RAW BINARY] Size: ${bufferToProcess.length}\n[HEX] ${bufferToProcess.toString('hex').match(/.{1,32}/g)?.join('\n') || ''}`;
         }
     } else if (Object.keys(query).length > 0) {
         parsedReqLog = JSON.stringify(query, null, 2);
     }
 
+    // Response Parse
     if (resBuffer.length > 0) {
         if (routeConfig && routeConfig.res) {
             parsedResLog = await decodeWithPython(routeConfig.res, resBuffer);
@@ -328,7 +335,7 @@ async function processAndLog(method, originalUrl, query, reqBuffer, resBuffer, s
             } catch {
                 let text = resBuffer.toString('utf8');
                 if (/^[\x20-\x7E\n\r]*$/.test(text) && text.length > 5) parsedResLog = text.length < 5000 ? text : `[TEXT RESPONSE] Size: ${resBuffer.length}`;
-                else parsedResLog = `[RAW BINARY RESPONSE] Size: ${resBuffer.length}`;
+                else parsedResLog = `[RAW BINARY RESPONSE] Size: ${resBuffer.length}\n[HEX] ${resBuffer.toString('hex').match(/.{1,32}/g)?.join('\n') || ''}`;
             }
         }
     }
