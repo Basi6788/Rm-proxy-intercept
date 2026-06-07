@@ -66,7 +66,7 @@ function encryptData(buffer, prefix) {
     try {
         const cipher = crypto.createCipheriv(ALGO, AES_KEY, AES_IV);
         const enc = Buffer.concat([cipher.update(buffer), cipher.final()]);
-        return Buffer.concat([prefix, enc]); // Wapas prefix laga do taake binary corrupt na ho
+        return Buffer.concat([prefix, enc]);
     } catch (e) { return null; }
 }
 
@@ -92,6 +92,72 @@ async function encodeWithPythonRaw(msgName, jsonData) {
         return result.success ? Buffer.from(result.data, 'base64') : null;
     } catch (e) { return null; }
 }
+
+// ===================================================
+// 🆕 4. JWT TOOL - ALAG SE SECTION (NAYA ROUTE)
+// ===================================================
+app.use(express.json()); // Sirf is route ke liye JSON body parse
+
+app.post('/api/generate-jwt', async (req, res) => {
+    try {
+        const { guest_account_info } = req.body;
+        
+        if (!guest_account_info || !guest_account_info['com.garena.msdk.guest_uid'] || !guest_account_info['com.garena.msdk.guest_password']) {
+            return res.status(400).json({ error: 'Invalid format! Use: {"guest_account_info":{"com.garena.msdk.guest_password":"...","com.garena.msdk.guest_uid":"..."}}' });
+        }
+        
+        const uid = guest_account_info['com.garena.msdk.guest_uid'];
+        const password = guest_account_info['com.garena.msdk.guest_password'];
+        
+        console.log(`[JWT Tool] Generating token for UID: ${uid}`);
+        
+        // MajorLogin request prepare karo
+        const loginReq = {
+            uid: uid,
+            password: password,
+            platform: 1, // Android
+            version: "OB53"
+        };
+        
+        // Encode to Protobuf via Python API
+        const encodedReq = await encodeWithPythonRaw('LoginReq', loginReq);
+        if (!encodedReq) throw new Error('Failed to encode LoginReq');
+        
+        // Encrypt with AES
+        const encrypted = encryptData(encodedReq, Buffer.alloc(0));
+        
+        // Send to Garena login server
+        const targetUrl = `https://${SERVERS.LOGIN}/MajorLogin`;
+        const response = await fetch(targetUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream', 'Host': SERVERS.LOGIN },
+            body: encrypted
+        });
+        
+        const encryptedRes = Buffer.from(await response.arrayBuffer());
+        const { dec: decryptedRes } = smartDecrypt(encryptedRes);
+        
+        if (!decryptedRes) throw new Error('Decryption failed');
+        
+        const jsonRes = await decodeWithPythonRaw('LoginRes', decryptedRes);
+        
+        if (jsonRes && jsonRes.token) {
+            return res.json({ 
+                success: true, 
+                token: jsonRes.token,
+                uid: uid,
+                server_url: jsonRes.server_url,
+                lock_region: jsonRes.lock_region
+            });
+        } else {
+            return res.status(500).json({ error: 'Token not found in response', response: jsonRes });
+        }
+        
+    } catch (error) {
+        console.error('[JWT Tool Error]', error);
+        return res.status(500).json({ error: error.message });
+    }
+});
 
 // ==========================================
 // 🚀 3. API & DASHBOARD ROUTES
@@ -122,6 +188,7 @@ app.get('/romeo/ds', (req, res) => {
             ::-webkit-scrollbar-thumb { background: #8b5cf6; border-radius: 10px; }
             .aurora-glow { box-shadow: 0 0 15px rgba(139, 92, 246, 0.4); border: 1px solid rgba(139, 92, 246, 0.5); }
             .glass-panel { background: rgba(10, 10, 15, 0.85); backdrop-filter: blur(10px); border: 1px solid rgba(139, 92, 246, 0.2); }
+            .tab-active { background: rgba(139, 92, 246, 0.2); border-bottom: 2px solid #8b5cf6; }
         </style>
     </head>
     <body class="p-3 sm:p-6 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/10 via-[#030008] to-black min-h-screen">
@@ -141,7 +208,36 @@ app.get('/romeo/ds', (req, res) => {
                     <button onclick="nukeEverything()" class="px-3 py-2 bg-red-950 text-red-500 border border-red-500/50 hover:bg-red-600 hover:text-white transition-all text-[10px] font-black rounded-md tracking-wider">🗑️ CLEAR</button>
                 </div>
             </header>
+            
+            <!-- TABS -->
+            <div class="flex gap-2 mb-4 border-b border-purple-500/20">
+                <button onclick="showTab('logs')" id="tab-logs-btn" class="px-4 py-2 text-sm font-bold text-purple-400 border-b-2 border-purple-500 transition-all">📡 LIVE LOGS</button>
+                <button onclick="showTab('jwt')" id="tab-jwt-btn" class="px-4 py-2 text-sm font-bold text-gray-400 hover:text-purple-400 transition-all">🔑 JWT GENERATOR</button>
+            </div>
+            
+            <!-- LOGS CONTAINER -->
             <div id="logs-container" class="space-y-4"></div>
+            
+            <!-- JWT TOOL CONTAINER (Hidden by default) -->
+            <div id="jwt-container" class="hidden glass-panel rounded-xl p-6">
+                <h2 class="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400 mb-4">🔐 Generate JWT Token from Guest Account</h2>
+                <p class="text-gray-400 text-xs mb-3">Paste your guest account JSON below:</p>
+                <textarea id="jsonInput" rows="6" class="w-full bg-black/50 border border-purple-500/30 rounded-lg p-3 text-sm font-mono text-green-300 focus:outline-none focus:border-purple-500" placeholder='{"guest_account_info":{"com.garena.msdk.guest_password":"344D0EC1ACC234C7D283B0A11954147F18A4AD38F3F3F8C4B7E53AB43D19FD2A","com.garena.msdk.guest_uid":"4627647913"}}'></textarea>
+                <div class="flex gap-3 mt-4">
+                    <button onclick="generateJWT()" class="px-5 py-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 rounded-lg font-bold text-sm transition-all shadow-lg">✨ Generate Token</button>
+                    <button onclick="clearJWT()" class="px-5 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-bold transition-all">🗑️ Clear</button>
+                </div>
+                <div id="jwtResult" class="mt-5 hidden">
+                    <div class="bg-black/50 border border-purple-500/30 rounded-lg p-4">
+                        <p class="text-green-400 text-xs font-bold mb-2">✅ JWT TOKEN GENERATED:</p>
+                        <pre id="tokenOutput" class="text-xs text-purple-300 break-all whitespace-pre-wrap"></pre>
+                        <button onclick="copyToken()" class="mt-3 px-3 py-1 bg-purple-900/50 hover:bg-purple-800 rounded text-xs transition-all">📋 Copy Token</button>
+                    </div>
+                </div>
+                <div id="jwtError" class="mt-5 hidden bg-red-950/50 border border-red-500/30 rounded-lg p-3">
+                    <p class="text-red-400 text-xs" id="errorMsg"></p>
+                </div>
+            </div>
         </div>
 
         <script>
@@ -196,7 +292,88 @@ app.get('/romeo/ds', (req, res) => {
                 document.getElementById('logs-container').innerHTML = logs.map(generateLogHTML).join('');
             }
             async function nukeEverything() { await fetch('/api/internal/clear', { method: 'POST' }); await db.logs.clear(); document.getElementById('logs-container').innerHTML = ''; }
-            setInterval(syncServerData, 1000); fullRender(); 
+            
+            // Tab switching
+            function showTab(tab) {
+                const logsContainer = document.getElementById('logs-container');
+                const jwtContainer = document.getElementById('jwt-container');
+                const logsBtn = document.getElementById('tab-logs-btn');
+                const jwtBtn = document.getElementById('tab-jwt-btn');
+                
+                if(tab === 'logs') {
+                    logsContainer.classList.remove('hidden');
+                    jwtContainer.classList.add('hidden');
+                    logsBtn.classList.add('border-purple-500', 'text-purple-400');
+                    logsBtn.classList.remove('text-gray-400');
+                    jwtBtn.classList.remove('border-purple-500', 'text-purple-400');
+                    jwtBtn.classList.add('text-gray-400');
+                } else {
+                    logsContainer.classList.add('hidden');
+                    jwtContainer.classList.remove('hidden');
+                    jwtBtn.classList.add('border-purple-500', 'text-purple-400');
+                    jwtBtn.classList.remove('text-gray-400');
+                    logsBtn.classList.remove('border-purple-500', 'text-purple-400');
+                    logsBtn.classList.add('text-gray-400');
+                }
+            }
+            
+            async function generateJWT() {
+                const rawJson = document.getElementById('jsonInput').value.trim();
+                if(!rawJson) {
+                    showError("Please paste your guest account JSON first!");
+                    return;
+                }
+                
+                try {
+                    const parsed = JSON.parse(rawJson);
+                    if(!parsed.guest_account_info || !parsed.guest_account_info['com.garena.msdk.guest_uid'] || !parsed.guest_account_info['com.garena.msdk.guest_password']) {
+                        showError("Invalid format! Use: {\\"guest_account_info\\":{\\"com.garena.msdk.guest_password\\":\\"...\\",\\"com.garena.msdk.guest_uid\\":\\"...\\"}}");
+                        return;
+                    }
+                    
+                    document.getElementById('jwtResult').classList.add('hidden');
+                    document.getElementById('jwtError').classList.add('hidden');
+                    
+                    const response = await fetch('/api/generate-jwt', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: rawJson
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if(data.success) {
+                        document.getElementById('tokenOutput').innerText = data.token;
+                        document.getElementById('jwtResult').classList.remove('hidden');
+                    } else {
+                        showError(data.error || "Something went wrong!");
+                    }
+                } catch(e) {
+                    showError("Invalid JSON format: " + e.message);
+                }
+            }
+            
+            function showError(msg) {
+                document.getElementById('errorMsg').innerText = msg;
+                document.getElementById('jwtError').classList.remove('hidden');
+                document.getElementById('jwtResult').classList.add('hidden');
+            }
+            
+            function clearJWT() {
+                document.getElementById('jsonInput').value = '';
+                document.getElementById('jwtResult').classList.add('hidden');
+                document.getElementById('jwtError').classList.add('hidden');
+            }
+            
+            function copyToken() {
+                const token = document.getElementById('tokenOutput').innerText;
+                navigator.clipboard.writeText(token);
+                alert("✅ Token copied to clipboard!");
+            }
+            
+            setInterval(syncServerData, 1000); 
+            fullRender(); 
+            showTab('logs');
         </script>
     </body>
     </html>
@@ -204,10 +381,11 @@ app.get('/romeo/ds', (req, res) => {
 });
 
 // ==========================================
-// 🌌 4. CATCH-ALL HYBRID INTERCEPTOR (ASYNC + SYNC INJECTION)
+// 🌌 5. CATCH-ALL HYBRID INTERCEPTOR (ASYNC + SYNC INJECTION)
 // ==========================================
 app.all('*', async (req, res) => {
-    if (req.path === '/') return res.redirect('/romeo/ds');
+    if (req.path === '/' || req.path === '/romeo/ds') return;
+    if (req.path === '/api/generate-jwt') return;
 
     const startTime = Date.now();
     let reqBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
@@ -260,7 +438,7 @@ app.all('*', async (req, res) => {
         });
 
         let resBuffer = Buffer.from(await garenaResponse.arrayBuffer());
-        let modifiedResLog = null; // Agar hum modify karenge toh dashboard ke liye yahan save karenge
+        let modifiedResLog = null;
 
         // ========================================================
         // 💉 3. ACTIVE INJECTION ZONE (BLOCKING FOR MAJORLOGIN)
@@ -274,7 +452,7 @@ app.all('*', async (req, res) => {
                 
                 if (jsonRes && jsonRes.server_url) {
                     const oldUrl = jsonRes.server_url;
-                    jsonRes.server_url = MY_PROXY_URL; // 🔥 HIJACK!
+                    jsonRes.server_url = MY_PROXY_URL;
                     modifiedResLog = JSON.stringify(jsonRes, null, 2);
                     
                     console.log(`✅ Injecting URL: ${oldUrl} -> ${MY_PROXY_URL}`);
@@ -283,7 +461,7 @@ app.all('*', async (req, res) => {
                     if (reEncodedBin) {
                         let reEncryptedBin = encryptData(reEncodedBin, prefix);
                         if (reEncryptedBin) {
-                            resBuffer = reEncryptedBin; // 🔥 OVERWRITE ORIGINAL BUFFER
+                            resBuffer = reEncryptedBin;
                         }
                     }
                 }
