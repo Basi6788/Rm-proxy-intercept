@@ -23,10 +23,10 @@ const AES_IV  = Buffer.from('6oyZDr22E3ychjM%', 'utf8');
 const ALGO    = 'aes-128-cbc';
 
 let requestLogsBuffer = []; 
-let allTimeLogs = []; // Store all logs permanently
+let allTimeLogs = [];
 
 // ==========================================
-// 🗺️ 1. THE ROUTER MAP
+// 🗺️ ROUTER MAP
 // ==========================================
 const ROUTE_MAP = {
     'MajorLogin': { req: 'LoginReq', res: 'LoginRes', encrypt: true, target: SERVERS.LOGIN },
@@ -45,7 +45,7 @@ const ROUTE_MAP = {
 };
 
 // ==========================================
-// 🛠️ 2. SMART CRYPTO ENGINE
+// 🛠️ CRYPTO ENGINE
 // ==========================================
 function smartDecrypt(buffer) {
     if (!buffer || buffer.length === 0) return { dec: null, prefix: Buffer.alloc(0) };
@@ -93,15 +93,12 @@ async function encodeWithPythonRaw(msgName, jsonData) {
 }
 
 // ===================================================
-// 🆕 JWT GENERATOR API - FIXED
+// JWT GENERATOR API
 // ===================================================
 app.use(express.json());
 
 app.post('/api/generate-jwt', async (req, res) => {
     try {
-        console.log('[JWT Tool] Received body:', JSON.stringify(req.body));
-        
-        // Handle multiple possible input formats
         let guest_account_info = null;
         
         if (req.body.guest_account_info) {
@@ -111,15 +108,8 @@ app.post('/api/generate-jwt', async (req, res) => {
                 'com.garena.msdk.guest_uid': req.body['com.garena.msdk.guest_uid'],
                 'com.garena.msdk.guest_password': req.body['com.garena.msdk.guest_password']
             };
-        } else {
-            // Try to find any fields
-            guest_account_info = {
-                'com.garena.msdk.guest_uid': req.body.uid || req.body.guest_uid,
-                'com.garena.msdk.guest_password': req.body.password || req.body.guest_password
-            };
         }
         
-        // Clean password (remove spaces, newlines)
         if (guest_account_info && guest_account_info['com.garena.msdk.guest_password']) {
             guest_account_info['com.garena.msdk.guest_password'] = 
                 guest_account_info['com.garena.msdk.guest_password'].replace(/[\s\n\r]/g, '');
@@ -129,14 +119,10 @@ app.post('/api/generate-jwt', async (req, res) => {
         const password = guest_account_info?.['com.garena.msdk.guest_password'];
         
         if (!uid || !password) {
-            return res.status(400).json({ 
-                error: 'Missing required fields',
-                hint: 'Use format: {"guest_account_info": {"com.garena.msdk.guest_uid": "...", "com.garena.msdk.guest_password": "..."}}'
-            });
+            return res.status(400).json({ error: 'Invalid credentials: Missing UID or password' });
         }
         
-        console.log(`[JWT Tool] Generating token for UID: ${uid}`);
-        console.log(`[JWT Tool] Password length: ${password.length}`);
+        console.log(`[JWT] Generating for UID: ${uid}`);
         
         const loginReq = {
             uid: uid,
@@ -146,7 +132,7 @@ app.post('/api/generate-jwt', async (req, res) => {
         };
         
         const encodedReq = await encodeWithPythonRaw('LoginReq', loginReq);
-        if (!encodedReq) throw new Error('Failed to encode LoginReq');
+        if (!encodedReq) throw new Error('Failed to encode request');
         
         const encrypted = encryptData(encodedReq, Buffer.alloc(0));
         
@@ -173,22 +159,21 @@ app.post('/api/generate-jwt', async (req, res) => {
                 lock_region: jsonRes.lock_region || 'Global'
             });
         } else {
-            return res.status(500).json({ error: 'Token not found in response', response: jsonRes });
+            return res.status(500).json({ error: jsonRes?.error || 'Token generation failed - Invalid guest account' });
         }
         
     } catch (error) {
-        console.error('[JWT Tool Error]', error);
+        console.error('[JWT Error]', error);
         return res.status(500).json({ error: error.message });
     }
 });
 
 // ==========================================
-// 🚀 API & DASHBOARD ROUTES
+// API ROUTES
 // ==========================================
 app.get('/api/internal/logs/sync', (req, res) => {
     const logsToSend = [...requestLogsBuffer];
     requestLogsBuffer = [];
-    // Store in permanent logs
     allTimeLogs.unshift(...logsToSend);
     if (allTimeLogs.length > 200) allTimeLogs = allTimeLogs.slice(0, 200);
     res.json(logsToSend);
@@ -207,7 +192,7 @@ app.post('/api/internal/clear', (req, res) => {
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // ==========================================
-// 🎨 SPRING GREEN THEME DASHBOARD
+// 🎨 DASHBOARD WITH SPRING & WINTER THEMES
 // ==========================================
 app.get('/romeo/ds', (req, res) => {
     res.send(`
@@ -216,7 +201,7 @@ app.get('/romeo/ds', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <title>🌸 KING NEXUS V9 | Spring Edition</title>
+        <title>🌸 KING NEXUS V9 | Seasonal Edition</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -224,125 +209,240 @@ app.get('/romeo/ds', (req, res) => {
         <style>
             * { font-family: 'Inter', sans-serif; }
             
-            body { 
-                background: linear-gradient(135deg, #0a2e1a 0%, #1a4a2a 25%, #0d2818 50%, #1a3a2a 75%, #0a2e1a 100%);
-                min-height: 100vh;
+            /* Spring Theme (Default) */
+            body.spring {
+                background: linear-gradient(135deg, #1a0a2e 0%, #2d1b4e 25%, #1a0a2e 50%, #2d1b4e 75%, #1a0a2e 100%);
                 position: relative;
+                min-height: 100vh;
             }
             
-            body::before {
+            body.spring::before {
                 content: '';
                 position: fixed;
                 top: 0;
                 left: 0;
                 right: 0;
                 bottom: 0;
-                background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320"><path fill="rgba(34,197,94,0.05)" d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,154.7C960,171,1056,181,1152,165.3C1248,149,1344,107,1392,85.3L1440,64L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path></svg>') repeat-x bottom;
-                background-size: cover;
-                opacity: 0.3;
+                background-image: 
+                    linear-gradient(rgba(168, 85, 247, 0.1) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(168, 85, 247, 0.1) 1px, transparent 1px);
+                background-size: 40px 40px;
                 pointer-events: none;
             }
             
-            .glass-panel {
-                background: rgba(20, 40, 25, 0.75);
+            /* Winter Theme */
+            body.winter {
+                background: linear-gradient(135deg, #0f2027 0%, #203a43 25%, #2c5364 50%, #203a43 75%, #0f2027 100%);
+                position: relative;
+                min-height: 100vh;
+            }
+            
+            body.winter::before {
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background-image: 
+                    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+                background-size: 40px 40px;
+                pointer-events: none;
+            }
+            
+            /* Snow Effect */
+            .snow-flake {
+                position: fixed;
+                color: white;
+                user-select: none;
+                pointer-events: none;
+                z-index: 9999;
+                animation: fall linear forwards;
+            }
+            
+            @keyframes fall {
+                to {
+                    transform: translateY(100vh);
+                    opacity: 0;
+                }
+            }
+            
+            /* Spring Glass Panel */
+            body.spring .glass-panel {
+                background: rgba(25, 15, 45, 0.7);
                 backdrop-filter: blur(12px);
-                border: 1px solid rgba(74, 222, 128, 0.2);
+                border: 1px solid rgba(168, 85, 247, 0.3);
                 transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                 position: relative;
                 overflow: hidden;
             }
             
-            .glass-panel::before {
+            body.spring .glass-panel::before {
                 content: '';
                 position: absolute;
                 top: 0;
                 left: -100%;
                 width: 100%;
                 height: 100%;
-                background: linear-gradient(90deg, transparent, rgba(74, 222, 128, 0.1), transparent);
+                background: linear-gradient(90deg, transparent, rgba(168, 85, 247, 0.15), transparent);
                 transition: left 0.5s;
             }
             
-            .glass-panel:hover::before {
+            body.spring .glass-panel:hover::before {
                 left: 100%;
             }
             
-            .glass-panel:hover {
-                border-color: rgba(74, 222, 128, 0.6);
-                box-shadow: 0 0 30px rgba(74, 222, 128, 0.2);
+            body.spring .glass-panel:hover {
+                border-color: rgba(168, 85, 247, 0.7);
+                box-shadow: 0 0 30px rgba(168, 85, 247, 0.3);
                 transform: translateY(-2px);
             }
             
-            .glow-text {
-                text-shadow: 0 0 20px rgba(74, 222, 128, 0.4);
-            }
-            
-            .btn-spring {
-                background: linear-gradient(135deg, #22c55e 0%, #16a34a 50%, #15803d 100%);
-                transition: all 0.2s ease;
+            /* Winter Glass Panel */
+            body.winter .glass-panel {
+                background: rgba(15, 32, 39, 0.7);
+                backdrop-filter: blur(12px);
+                border: 1px solid rgba(100, 200, 255, 0.3);
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
                 position: relative;
                 overflow: hidden;
             }
             
-            .btn-spring:hover {
+            body.winter .glass-panel::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: -100%;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(90deg, transparent, rgba(100, 200, 255, 0.15), transparent);
+                transition: left 0.5s;
+            }
+            
+            body.winter .glass-panel:hover::before {
+                left: 100%;
+            }
+            
+            body.winter .glass-panel:hover {
+                border-color: rgba(100, 200, 255, 0.7);
+                box-shadow: 0 0 30px rgba(100, 200, 255, 0.3);
                 transform: translateY(-2px);
-                box-shadow: 0 10px 25px -5px rgba(34, 197, 94, 0.4);
             }
             
-            .btn-spring:active {
-                transform: translateY(0);
+            /* Spring Button */
+            body.spring .btn-primary {
+                background: linear-gradient(135deg, #a855f7 0%, #d946ef 50%, #ec4899 100%);
+                transition: all 0.2s ease;
             }
             
-            .btn-outline-spring {
+            body.spring .btn-primary:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 10px 25px -5px rgba(168, 85, 247, 0.5);
+            }
+            
+            /* Winter Button */
+            body.winter .btn-primary {
+                background: linear-gradient(135deg, #38bdf8 0%, #00d4ff 50%, #7dd3fc 100%);
+                transition: all 0.2s ease;
+            }
+            
+            body.winter .btn-primary:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 10px 25px -5px rgba(56, 189, 248, 0.5);
+            }
+            
+            /* Spring Outline Button */
+            body.spring .btn-outline {
                 background: transparent;
-                border: 1px solid rgba(74, 222, 128, 0.4);
+                border: 1px solid rgba(168, 85, 247, 0.4);
                 transition: all 0.2s ease;
             }
             
-            .btn-outline-spring:hover {
-                background: rgba(74, 222, 128, 0.1);
-                border-color: rgba(74, 222, 128, 0.8);
-                box-shadow: 0 0 15px rgba(74, 222, 128, 0.2);
+            body.spring .btn-outline:hover {
+                background: rgba(168, 85, 247, 0.15);
+                border-color: rgba(168, 85, 247, 0.8);
+                box-shadow: 0 0 15px rgba(168, 85, 247, 0.2);
             }
             
-            .input-spring {
+            /* Winter Outline Button */
+            body.winter .btn-outline {
+                background: transparent;
+                border: 1px solid rgba(56, 189, 248, 0.4);
+                transition: all 0.2s ease;
+            }
+            
+            body.winter .btn-outline:hover {
+                background: rgba(56, 189, 248, 0.15);
+                border-color: rgba(56, 189, 248, 0.8);
+                box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+            }
+            
+            /* Spring Input */
+            body.spring .input-dark {
                 background: rgba(0, 0, 0, 0.5);
-                border: 1px solid rgba(74, 222, 128, 0.2);
+                border: 1px solid rgba(168, 85, 247, 0.3);
                 transition: all 0.2s ease;
-                color: #dcfce7;
+                color: #f0e6ff;
             }
             
-            .input-spring:focus {
-                border-color: #22c55e;
+            body.spring .input-dark:focus {
+                border-color: #a855f7;
                 outline: none;
-                box-shadow: 0 0 15px rgba(34, 197, 94, 0.3);
-                background: rgba(0, 0, 0, 0.7);
+                box-shadow: 0 0 15px rgba(168, 85, 247, 0.3);
             }
             
-            .tab-spring {
+            /* Winter Input */
+            body.winter .input-dark {
+                background: rgba(0, 0, 0, 0.5);
+                border: 1px solid rgba(56, 189, 248, 0.3);
                 transition: all 0.2s ease;
-                position: relative;
+                color: #e0f2fe;
             }
             
-            .tab-active-spring {
-                background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(22, 163, 74, 0.1) 100%);
-                border-bottom: 2px solid #22c55e;
-                color: #22c55e;
+            body.winter .input-dark:focus {
+                border-color: #38bdf8;
+                outline: none;
+                box-shadow: 0 0 15px rgba(56, 189, 248, 0.3);
             }
             
-            .tab-spring:hover:not(.tab-active-spring) {
-                background: rgba(34, 197, 94, 0.1);
-                transform: translateY(-1px);
+            /* Spring Tab */
+            body.spring .tab-active {
+                background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(236, 72, 153, 0.1) 100%);
+                border-bottom: 2px solid #a855f7;
+                color: #c084fc;
+            }
+            
+            /* Winter Tab */
+            body.winter .tab-active {
+                background: linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(0, 212, 255, 0.1) 100%);
+                border-bottom: 2px solid #38bdf8;
+                color: #7dd3fc;
+            }
+            
+            body.spring .glow-text {
+                text-shadow: 0 0 20px rgba(168, 85, 247, 0.5);
+            }
+            
+            body.winter .glow-text {
+                text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);
             }
             
             .code-block {
                 background: rgba(0, 0, 0, 0.6);
-                border: 1px solid rgba(74, 222, 128, 0.2);
                 border-radius: 12px;
                 padding: 16px;
                 font-family: 'Courier New', monospace;
                 font-size: 12px;
                 overflow-x: auto;
+            }
+            
+            body.spring .code-block {
+                border: 1px solid rgba(168, 85, 247, 0.2);
+            }
+            
+            body.winter .code-block {
+                border: 1px solid rgba(56, 189, 248, 0.2);
             }
             
             .log-entry {
@@ -354,9 +454,9 @@ app.get('/romeo/ds', (req, res) => {
             }
             
             ::-webkit-scrollbar { width: 6px; height: 6px; }
-            ::-webkit-scrollbar-track { background: #0a2e1a; }
-            ::-webkit-scrollbar-thumb { background: #22c55e; border-radius: 10px; }
-            ::-webkit-scrollbar-thumb:hover { background: #16a34a; }
+            ::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.3); }
+            body.spring ::-webkit-scrollbar-thumb { background: #a855f7; border-radius: 10px; }
+            body.winter ::-webkit-scrollbar-thumb { background: #38bdf8; border-radius: 10px; }
             
             @keyframes float {
                 0%, 100% { transform: translateY(0px); }
@@ -368,74 +468,53 @@ app.get('/romeo/ds', (req, res) => {
             }
             
             @keyframes pulse-glow {
-                0%, 100% { box-shadow: 0 0 5px rgba(34, 197, 94, 0.3); }
-                50% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.6); }
+                0%, 100% { box-shadow: 0 0 5px rgba(168, 85, 247, 0.3); }
+                50% { box-shadow: 0 0 20px rgba(168, 85, 247, 0.6); }
             }
             
-            .pulse-glow {
+            body.spring .pulse-glow {
                 animation: pulse-glow 2s ease-in-out infinite;
             }
             
-            .theme-toggle {
-                background: rgba(0, 0, 0, 0.3);
-                border-radius: 60px;
-                padding: 4px;
-                cursor: pointer;
-                transition: all 0.3s;
-            }
-            
-            .theme-option {
-                padding: 6px 12px;
-                border-radius: 50px;
-                transition: all 0.2s;
-                font-size: 12px;
-                font-weight: 600;
-            }
-            
-            .theme-option.active {
-                background: #22c55e;
-                color: white;
-                box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
+            body.winter .pulse-glow {
+                animation: pulse-glow 2s ease-in-out infinite;
+                box-shadow: 0 0 5px rgba(56, 189, 248, 0.3);
             }
         </style>
     </head>
-    <body class="p-4 md:p-8">
-        <div class="max-w-7xl mx-auto relative z-10">
+    <body class="spring">
+        <div class="max-w-7xl mx-auto p-4 md:p-8 relative z-10">
             <!-- Header with Theme Toggle -->
             <div class="glass-panel rounded-2xl p-6 mb-6">
                 <div class="flex flex-col md:flex-row justify-between items-center gap-4">
                     <div class="flex items-center gap-4">
-                        <div class="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center float-animation">
+                        <div class="w-14 h-14 bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 rounded-2xl flex items-center justify-center float-animation">
                             <i class="fas fa-crown text-white text-3xl"></i>
                         </div>
                         <div>
-                            <h1 class="text-3xl md:text-5xl font-black glow-text" style="background: linear-gradient(135deg, #22c55e, #16a34a, #059669); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                            <h1 class="text-3xl md:text-5xl font-black glow-text" style="background: linear-gradient(135deg, #c084fc, #f472b6, #fb7185); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
                                 KING NEXUS V9
                             </h1>
                             <div class="flex items-center gap-2 mt-1">
                                 <div class="w-2 h-2 rounded-full bg-green-400 pulse-glow"></div>
-                                <p class="text-xs text-green-400/80 font-semibold uppercase tracking-wider">🌸 SPRING EDITION | ACTIVE INJECTION MODE</p>
+                                <p class="text-xs text-purple-300/80 font-semibold uppercase tracking-wider" id="seasonLabel">🌸 SPRING EDITION | ACTIVE INJECTION MODE</p>
                             </div>
                         </div>
                     </div>
                     
                     <div class="flex gap-3 items-center">
                         <!-- Theme Toggle -->
-                        <div class="theme-toggle flex gap-1">
-                            <div class="theme-option active" data-theme="spring" onclick="switchTheme('spring')">
+                        <div class="theme-toggle flex gap-2 bg-black/30 rounded-full p-1">
+                            <button onclick="setTheme('spring')" id="springBtn" class="px-4 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2 bg-purple-500/30 text-purple-300">
                                 <i class="fas fa-seedling"></i> Spring
-                            </div>
-                            <div class="theme-option" data-theme="summer" onclick="switchTheme('summer')">
-                                <i class="fas fa-sun"></i> Summer
-                            </div>
+                            </button>
+                            <button onclick="setTheme('winter')" id="winterBtn" class="px-4 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2 text-cyan-300/70 hover:bg-cyan-500/20">
+                                <i class="fas fa-snowflake"></i> Winter
+                            </button>
                         </div>
                         
-                        <div class="relative">
-                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-green-500/50 text-xs"></i>
-                            <input type="text" id="searchBox" oninput="filterLogs()" placeholder="Search logs..." class="input-spring pl-8 pr-3 py-2 rounded-lg text-sm w-48 md:w-64">
-                        </div>
                         <button onclick="nukeEverything()" class="bg-red-950/40 hover:bg-red-900/50 text-red-400 px-4 py-2 rounded-lg transition-all text-sm font-semibold border border-red-500/30 hover:shadow-lg hover:shadow-red-500/20">
-                            <i class="fas fa-trash-alt mr-2"></i>CLEAR
+                            <i class="fas fa-trash-alt mr-2"></i>CLEAR ALL
                         </button>
                     </div>
                 </div>
@@ -443,10 +522,10 @@ app.get('/romeo/ds', (req, res) => {
             
             <!-- Tabs -->
             <div class="flex gap-2 mb-6 bg-black/20 rounded-xl p-1 backdrop-blur-sm">
-                <button onclick="showTab('logs')" id="tab-logs-btn" class="tab-spring flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 tab-active-spring">
+                <button onclick="showTab('logs')" id="tab-logs-btn" class="tab-spring flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 tab-active">
                     <i class="fas fa-tachometer-alt"></i> LIVE LOGS
                 </button>
-                <button onclick="showTab('jwt')" id="tab-jwt-btn" class="tab-spring flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 text-green-400/60 hover:text-green-400">
+                <button onclick="showTab('jwt')" id="tab-jwt-btn" class="tab-spring flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 text-purple-400/60 hover:text-purple-400">
                     <i class="fas fa-key"></i> JWT GENERATOR
                 </button>
             </div>
@@ -459,64 +538,61 @@ app.get('/romeo/ds', (req, res) => {
                 <!-- JWT Generator Panel -->
                 <div class="glass-panel rounded-2xl p-6 mb-6">
                     <div class="flex items-center gap-3 mb-6">
-                        <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                        <div class="w-12 h-12 bg-gradient-to-br from-purple-500 via-pink-500 to-rose-500 rounded-xl flex items-center justify-center">
                             <i class="fas fa-key text-white text-xl"></i>
                         </div>
                         <div>
-                            <h2 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-400">JWT Token Generator</h2>
-                            <p class="text-xs text-green-400/70">Generate JWT token from guest account credentials</p>
+                            <h2 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-400 to-rose-400">JWT Token Generator</h2>
+                            <p class="text-xs text-purple-400/70">Generate JWT token from guest account credentials</p>
                         </div>
                     </div>
                     
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-xs font-semibold text-green-400/80 mb-2">
-                                <i class="fas fa-code mr-1"></i> Paste Guest Account JSON
+                            <label class="block text-xs font-semibold text-purple-400/80 mb-2">
+                                <i class="fas fa-code mr-1"></i> Guest Account JSON
                             </label>
-                            <textarea id="jsonInput" rows="6" class="w-full input-spring rounded-xl p-4 text-sm font-mono" placeholder='{"guest_account_info":{"com.garena.msdk.guest_password":"344D0EC1ACC234C7D283B0A11954147F18A4AD38F3F3F8C4B7E53AB43D19FD2A","com.garena.msdk.guest_uid":"4627647913"}}'></textarea>
-                            <p class="text-xs text-green-500/50 mt-2">
-                                <i class="fas fa-info-circle"></i> Spaces and line breaks are automatically handled
-                            </p>
+                            <textarea id="jsonInput" rows="5" class="w-full input-dark rounded-xl p-4 text-sm font-mono" placeholder='{"guest_account_info":{"com.garena.msdk.guest_password":"344D0EC1ACC234C7D283B0A11954147F18A4AD38F3F3F8C4B7E53AB43D19FD2A","com.garena.msdk.guest_uid":"4627647913"}}'></textarea>
                         </div>
                         
                         <div class="flex gap-3 flex-wrap">
-                            <button onclick="generateJWT()" class="btn-spring px-6 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2">
+                            <button onclick="generateJWT()" class="btn-primary px-6 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2">
                                 <i class="fas fa-magic"></i> Generate Token
                             </button>
-                            <button onclick="clearJWT()" class="btn-outline-spring px-5 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2">
+                            <button onclick="clearJWT()" class="btn-outline px-5 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2">
                                 <i class="fas fa-eraser"></i> Clear
                             </button>
-                            <button onclick="loadExample()" class="btn-outline-spring px-5 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2">
+                            <button onclick="loadExample()" class="btn-outline px-5 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2">
                                 <i class="fas fa-file-alt"></i> Load Example
                             </button>
                         </div>
                         
                         <!-- Result Area -->
                         <div id="jwtResult" class="hidden mt-6">
-                            <div class="bg-gradient-to-br from-green-900/30 to-emerald-900/30 rounded-xl p-5 border border-green-500/30">
+                            <div class="bg-gradient-to-br from-purple-900/30 via-pink-900/30 to-rose-900/30 rounded-xl p-5 border border-purple-500/30">
                                 <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
                                     <p class="text-green-400 text-sm font-bold flex items-center gap-2">
                                         <i class="fas fa-check-circle"></i> TOKEN GENERATED SUCCESSFULLY
                                     </p>
-                                    <button onclick="copyToken()" class="text-green-400/70 hover:text-green-400 text-sm transition-all">
+                                    <button onclick="copyToken()" class="text-purple-400/70 hover:text-purple-400 text-sm transition-all">
                                         <i class="fas fa-copy"></i> Copy Token
                                     </button>
                                 </div>
                                 <div class="code-block">
-                                    <code id="tokenOutput" class="text-green-300 break-all text-xs"></code>
+                                    <code id="tokenOutput" class="text-purple-300 break-all text-xs"></code>
                                 </div>
                                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs">
                                     <div class="bg-black/30 rounded-lg p-2">
-                                        <span class="text-green-500/70">UID:</span>
-                                        <span id="resultUid" class="text-green-300 ml-2 font-mono"></span>
+                                        <span class="text-purple-400/70">UID:</span>
+                                        <span id="resultUid" class="text-purple-300 ml-2 font-mono"></span>
                                     </div>
                                     <div class="bg-black/30 rounded-lg p-2">
-                                        <span class="text-green-500/70">Region:</span>
-                                        <span id="resultRegion" class="text-green-300 ml-2 font-mono"></span>
+                                        <span class="text-purple-400/70">Region:</span>
+                                        <span id="resultRegion" class="text-purple-300 ml-2 font-mono"></span>
                                     </div>
                                     <div class="bg-black/30 rounded-lg p-2">
-                                        <span class="text-green-500/70">Server:</span>
-                                        <span id="resultServer" class="text-green-300 ml-2 font-mono text-xs truncate"></span>
+                                        <span class="text-purple-400/70">Server:</span>
+                                        <span id="resultServer" class="text-purple-300 ml-2 font-mono text-xs truncate"></span>
                                     </div>
                                 </div>
                             </div>
@@ -536,16 +612,16 @@ app.get('/romeo/ds', (req, res) => {
                 <div class="glass-panel rounded-2xl p-6">
                     <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
                         <div class="flex items-center gap-2">
-                            <i class="fas fa-history text-green-400 text-xl"></i>
+                            <i class="fas fa-history text-purple-400 text-xl"></i>
                             <h3 class="text-lg font-bold text-white">📋 All Captured Logs</h3>
-                            <span id="logCount" class="text-xs bg-green-500/20 px-2 py-1 rounded-full text-green-400">0</span>
+                            <span id="logCount" class="text-xs bg-purple-500/20 px-2 py-1 rounded-full text-purple-400">0</span>
                         </div>
-                        <button onclick="refreshAllLogs()" class="btn-outline-spring px-3 py-1 rounded-lg text-xs">
+                        <button onclick="refreshAllLogs()" class="btn-outline px-3 py-1 rounded-lg text-xs">
                             <i class="fas fa-sync-alt"></i> Refresh
                         </button>
                     </div>
                     <div id="allLogsList" class="space-y-3 max-h-[500px] overflow-y-auto pr-2">
-                        <div class="text-center text-green-500/50 py-8">
+                        <div class="text-center text-purple-500/50 py-8">
                             <i class="fas fa-inbox text-3xl mb-2"></i>
                             <p>No logs captured yet. Proxy activity will appear here.</p>
                         </div>
@@ -554,53 +630,66 @@ app.get('/romeo/ds', (req, res) => {
             </div>
         </div>
 
-        <style id="theme-styles">
-            /* Summer theme styles */
-            .theme-summer body {
-                background: linear-gradient(135deg, #3b2a1a 0%, #5a3a2a 25%, #2a1a0a 50%, #4a2a1a 75%, #3b2a1a 100%);
-            }
-            .theme-summer .glass-panel {
-                background: rgba(60, 40, 25, 0.75);
-                border-color: rgba(251, 146, 60, 0.2);
-            }
-            .theme-summer .glass-panel:hover {
-                border-color: rgba(251, 146, 60, 0.6);
-                box-shadow: 0 0 30px rgba(251, 146, 60, 0.2);
-            }
-            .theme-summer .glow-text {
-                text-shadow: 0 0 20px rgba(251, 146, 60, 0.4);
-            }
-            .theme-summer .btn-spring {
-                background: linear-gradient(135deg, #fb923c 0%, #ea580c 50%, #c2410c 100%);
-            }
-            .theme-summer .tab-active-spring {
-                background: linear-gradient(135deg, rgba(251, 146, 60, 0.2) 0%, rgba(234, 88, 12, 0.1) 100%);
-                border-bottom-color: #fb923c;
-                color: #fb923c;
-            }
-        </style>
-
         <script>
             const db = new Dexie("NexusV9DB");
             db.version(1).stores({ logs: 'id, timestamp, method, targetHost, path, status, duration' });
             
             let currentTheme = 'spring';
+            let snowInterval = null;
             
-            function switchTheme(theme) {
+            function setTheme(theme) {
                 currentTheme = theme;
-                document.body.classList.remove('theme-spring', 'theme-summer');
-                if (theme === 'summer') {
-                    document.body.classList.add('theme-summer');
-                } else {
-                    document.body.classList.add('theme-spring');
-                }
+                document.body.classList.remove('spring', 'winter');
+                document.body.classList.add(theme);
                 
-                document.querySelectorAll('.theme-option').forEach(opt => {
-                    opt.classList.remove('active');
-                    if (opt.getAttribute('data-theme') === theme) {
-                        opt.classList.add('active');
-                    }
-                });
+                // Update buttons
+                const springBtn = document.getElementById('springBtn');
+                const winterBtn = document.getElementById('winterBtn');
+                const seasonLabel = document.getElementById('seasonLabel');
+                
+                if (theme === 'spring') {
+                    springBtn.classList.add('bg-purple-500/30', 'text-purple-300');
+                    springBtn.classList.remove('text-cyan-300/70');
+                    winterBtn.classList.remove('bg-cyan-500/30', 'text-cyan-300');
+                    winterBtn.classList.add('text-cyan-300/70');
+                    seasonLabel.innerHTML = '🌸 SPRING EDITION | ACTIVE INJECTION MODE';
+                    seasonLabel.className = 'text-xs text-purple-300/80 font-semibold uppercase tracking-wider';
+                    stopSnow();
+                } else {
+                    winterBtn.classList.add('bg-cyan-500/30', 'text-cyan-300');
+                    winterBtn.classList.remove('text-cyan-300/70');
+                    springBtn.classList.remove('bg-purple-500/30', 'text-purple-300');
+                    springBtn.classList.add('text-purple-300/70');
+                    seasonLabel.innerHTML = '❄️ WINTER EDITION | ACTIVE INJECTION MODE';
+                    seasonLabel.className = 'text-xs text-cyan-300/80 font-semibold uppercase tracking-wider';
+                    startSnow();
+                }
+            }
+            
+            function startSnow() {
+                stopSnow();
+                snowInterval = setInterval(createSnowflake, 200);
+            }
+            
+            function stopSnow() {
+                if (snowInterval) {
+                    clearInterval(snowInterval);
+                    snowInterval = null;
+                }
+                document.querySelectorAll('.snow-flake').forEach(s => s.remove());
+            }
+            
+            function createSnowflake() {
+                if (currentTheme !== 'winter') return;
+                const snowflake = document.createElement('div');
+                snowflake.classList.add('snow-flake');
+                snowflake.innerHTML = ['❄️', '❄️', '❄️', '❄️', '❄️', '❄️', '❄️', '❄️'][Math.floor(Math.random() * 8)];
+                snowflake.style.left = Math.random() * 100 + '%';
+                snowflake.style.fontSize = (Math.random() * 10 + 10) + 'px';
+                snowflake.style.opacity = Math.random() * 0.6 + 0.3;
+                snowflake.style.animationDuration = Math.random() * 4 + 3 + 's';
+                document.body.appendChild(snowflake);
+                setTimeout(() => snowflake.remove(), 7000);
             }
             
             async function syncServerData() {
@@ -609,7 +698,7 @@ app.get('/romeo/ds', (req, res) => {
                     const newLogs = await res.json();
                     if(newLogs.length > 0) { 
                         await db.logs.bulkPut(newLogs); 
-                        if(document.getElementById('searchBox').value.trim() === "") appendNewLogs(newLogs); 
+                        if(true) appendNewLogs(newLogs); 
                         else fullRender(); 
                     }
                     refreshAllLogs();
@@ -623,7 +712,7 @@ app.get('/romeo/ds', (req, res) => {
                     document.getElementById('logCount').innerText = logs.length;
                     const container = document.getElementById('allLogsList');
                     if (logs.length === 0) {
-                        container.innerHTML = '<div class="text-center text-green-500/50 py-8"><i class="fas fa-inbox text-3xl mb-2"></i><p>No logs captured yet. Proxy activity will appear here.</p></div>';
+                        container.innerHTML = '<div class="text-center text-purple-500/50 py-8"><i class="fas fa-inbox text-3xl mb-2"></i><p>No logs captured yet. Proxy activity will appear here.</p></div>';
                         return;
                     }
                     container.innerHTML = logs.slice(0, 100).map(log => generateCompactLogHTML(log)).join('');
@@ -635,11 +724,11 @@ app.get('/romeo/ds', (req, res) => {
                 let statusColor = isError ? 'text-red-400' : 'text-green-400';
                 let statusBg = isError ? 'bg-red-950/30' : 'bg-green-950/30';
                 return \`
-                    <div class="log-entry bg-black/20 rounded-lg p-3 border border-green-500/10 hover:border-green-500/30 transition-all">
+                    <div class="log-entry bg-black/20 rounded-lg p-3 border border-purple-500/10 hover:border-purple-500/30 transition-all">
                         <div class="flex justify-between items-start gap-2 flex-wrap">
                             <div class="flex items-center gap-2 flex-wrap">
-                                <span class="bg-green-900/40 text-green-300 px-2 py-0.5 rounded text-xs font-mono">\${log.method}</span>
-                                <span class="text-blue-300 text-xs font-mono break-all">[\${log.targetHost}] \${log.path}</span>
+                                <span class="bg-purple-900/40 text-purple-300 px-2 py-0.5 rounded text-xs font-mono">\${log.method}</span>
+                                <span class="text-cyan-300 text-xs font-mono break-all">[\${log.targetHost}] \${log.path}</span>
                             </div>
                             <div class="flex items-center gap-2">
                                 <span class="text-gray-500 text-xs">\${log.timestamp}</span>
@@ -659,10 +748,10 @@ app.get('/romeo/ds', (req, res) => {
                 let statusIcon = isError ? 'fa-times-circle' : 'fa-check-circle';
                 return \`
                 <div class="glass-panel rounded-xl p-4 log-entry">
-                    <div class="flex flex-wrap justify-between items-center mb-3 pb-2 border-b border-green-500/20 gap-2">
+                    <div class="flex flex-wrap justify-between items-center mb-3 pb-2 border-b border-purple-500/20 gap-2">
                         <div class="flex items-center gap-2 flex-wrap">
-                            <span class="bg-green-900/40 text-green-300 px-2 py-1 rounded text-xs font-bold">\${log.method}</span>
-                            <span class="text-blue-300 text-xs font-mono">[\${log.targetHost}] \${log.path}</span>
+                            <span class="bg-purple-900/40 text-purple-300 px-2 py-1 rounded text-xs font-bold">\${log.method}</span>
+                            <span class="text-cyan-300 text-xs font-mono">[\${log.targetHost}] \${log.path}</span>
                         </div>
                         <div class="flex items-center gap-3">
                             <span class="text-gray-500 text-xs">\${log.timestamp} | \${log.duration}</span>
@@ -673,13 +762,13 @@ app.get('/romeo/ds', (req, res) => {
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <div>
-                            <div class="text-green-500/70 text-xs mb-2 font-semibold flex items-center gap-1">
+                            <div class="text-purple-400/70 text-xs mb-2 font-semibold flex items-center gap-1">
                                 <i class="fas fa-arrow-up"></i> REQUEST
                             </div>
-                            <pre class="bg-black/50 rounded-lg p-3 text-xs text-green-300/80 overflow-x-auto max-h-48">\${log.req || '[EMPTY]'}</pre>
+                            <pre class="bg-black/50 rounded-lg p-3 text-xs text-purple-300/80 overflow-x-auto max-h-48">\${log.req || '[EMPTY]'}</pre>
                         </div>
                         <div>
-                            <div class="text-green-500/70 text-xs mb-2 font-semibold flex items-center gap-1">
+                            <div class="text-purple-400/70 text-xs mb-2 font-semibold flex items-center gap-1">
                                 <i class="fas fa-arrow-down"></i> RESPONSE
                             </div>
                             <pre class="bg-black/50 rounded-lg p-3 text-xs \${isError ? 'text-red-300/80' : 'text-emerald-300/80'} overflow-x-auto max-h-48">\${log.res || '[EMPTY]'}</pre>
@@ -694,14 +783,8 @@ app.get('/romeo/ds', (req, res) => {
             }
             
             async function fullRender() {
-                const term = document.getElementById('searchBox').value.toLowerCase();
                 let logs = await db.logs.orderBy('id').reverse().toArray();
-                if(term) logs = logs.filter(l => l.path.toLowerCase().includes(term) || String(l.status).includes(term) || l.targetHost.toLowerCase().includes(term));
-                document.getElementById('logs-container').innerHTML = logs.length ? logs.map(generateLogHTML).join('') : '<div class="text-center text-green-500/50 py-12"><i class="fas fa-inbox text-4xl mb-2"></i><p>No logs found</p></div>';
-            }
-            
-            function filterLogs() {
-                fullRender();
+                document.getElementById('logs-container').innerHTML = logs.length ? logs.map(generateLogHTML).join('') : '<div class="text-center text-purple-500/50 py-12"><i class="fas fa-inbox text-4xl mb-2"></i><p>No logs found</p></div>';
             }
             
             async function nukeEverything() {
@@ -720,18 +803,18 @@ app.get('/romeo/ds', (req, res) => {
                 if(tab === 'logs') {
                     logsContainer.classList.remove('hidden');
                     jwtContainer.classList.add('hidden');
-                    logsBtn.classList.add('tab-active-spring');
-                    logsBtn.classList.remove('text-green-400/60');
-                    jwtBtn.classList.remove('tab-active-spring');
-                    jwtBtn.classList.add('text-green-400/60');
+                    logsBtn.classList.add('tab-active');
+                    logsBtn.classList.remove('text-purple-400/60');
+                    jwtBtn.classList.remove('tab-active');
+                    jwtBtn.classList.add('text-purple-400/60');
                     fullRender();
                 } else {
                     logsContainer.classList.add('hidden');
                     jwtContainer.classList.remove('hidden');
-                    jwtBtn.classList.add('tab-active-spring');
-                    jwtBtn.classList.remove('text-green-400/60');
-                    logsBtn.classList.remove('tab-active-spring');
-                    logsBtn.classList.add('text-green-400/60');
+                    jwtBtn.classList.add('tab-active');
+                    jwtBtn.classList.remove('text-purple-400/60');
+                    logsBtn.classList.remove('tab-active');
+                    logsBtn.classList.add('text-purple-400/60');
                     refreshAllLogs();
                 }
             }
@@ -750,15 +833,9 @@ app.get('/romeo/ds', (req, res) => {
                 try {
                     let parsed = JSON.parse(rawJson);
                     
-                    // Auto-clean spaces from password
                     if (parsed.guest_account_info && parsed.guest_account_info['com.garena.msdk.guest_password']) {
                         parsed.guest_account_info['com.garena.msdk.guest_password'] = 
                             parsed.guest_account_info['com.garena.msdk.guest_password'].replace(/[\\s\\n\\r]/g, '');
-                    }
-                    
-                    if(!parsed.guest_account_info || !parsed.guest_account_info['com.garena.msdk.guest_uid'] || !parsed.guest_account_info['com.garena.msdk.guest_password']) {
-                        showError("Invalid format! Required: guest_account_info with com.garena.msdk.guest_uid and com.garena.msdk.guest_password");
-                        return;
                     }
                     
                     document.getElementById('jwtResult').classList.add('hidden');
@@ -779,7 +856,7 @@ app.get('/romeo/ds', (req, res) => {
                         document.getElementById('resultServer').innerText = data.server_url || 'N/A';
                         document.getElementById('jwtResult').classList.remove('hidden');
                     } else {
-                        showError(data.error || "Something went wrong!");
+                        showError(data.error || "Token generation failed!");
                     }
                 } catch(e) {
                     showError("Invalid JSON format: " + e.message);
@@ -841,7 +918,7 @@ app.all('*', async (req, res) => {
             "is_review_server": false, "use_login_optional_download": true,
             "use_background_download": true, "use_background_download_lobby": true,
             "country_code": "SG", "client_ip": "15.235.211.216", "gdpr_version": 0,
-            "billboard_msg": "🌸 KING NEXUS V9: SPRING HIJACKER",
+            "billboard_msg": "👑 KING NEXUS V9: HIJACKER ENGINE",
             "core_url": "csoversea.castle.freefiremobile.com",
             "core_ip_list": ["0.0.0.0", "50.109.27.134", "129.226.2.163"],
             "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefireth",
@@ -952,6 +1029,6 @@ async function processAndLog(method, targetHost, originalUrl, query, reqBuffer, 
 }
 
 app.listen(process.env.PORT || 3000, () => {
-    console.log('🌸 KING NEXUS V9 - Spring Edition Running on port 3000');
+    console.log('🌸 KING NEXUS V9 - Seasonal Edition Running on port 3000');
     console.log('📊 Dashboard: http://localhost:3000/romeo/ds');
 });
