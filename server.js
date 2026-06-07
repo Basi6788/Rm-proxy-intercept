@@ -23,6 +23,7 @@ const AES_IV  = Buffer.from('6oyZDr22E3ychjM%', 'utf8');
 const ALGO    = 'aes-128-cbc';
 
 let requestLogsBuffer = []; 
+let allTimeLogs = []; // Store all logs permanently
 
 // ==========================================
 // 🗺️ 1. THE ROUTER MAP
@@ -92,28 +93,50 @@ async function encodeWithPythonRaw(msgName, jsonData) {
 }
 
 // ===================================================
-// 🆕 JWT GENERATOR API
+// 🆕 JWT GENERATOR API - FIXED
 // ===================================================
 app.use(express.json());
 
 app.post('/api/generate-jwt', async (req, res) => {
     try {
-        let { guest_account_info } = req.body;
+        console.log('[JWT Tool] Received body:', JSON.stringify(req.body));
         
-        // Auto-clean spaces from password
+        // Handle multiple possible input formats
+        let guest_account_info = null;
+        
+        if (req.body.guest_account_info) {
+            guest_account_info = req.body.guest_account_info;
+        } else if (req.body['com.garena.msdk.guest_uid']) {
+            guest_account_info = {
+                'com.garena.msdk.guest_uid': req.body['com.garena.msdk.guest_uid'],
+                'com.garena.msdk.guest_password': req.body['com.garena.msdk.guest_password']
+            };
+        } else {
+            // Try to find any fields
+            guest_account_info = {
+                'com.garena.msdk.guest_uid': req.body.uid || req.body.guest_uid,
+                'com.garena.msdk.guest_password': req.body.password || req.body.guest_password
+            };
+        }
+        
+        // Clean password (remove spaces, newlines)
         if (guest_account_info && guest_account_info['com.garena.msdk.guest_password']) {
             guest_account_info['com.garena.msdk.guest_password'] = 
-                guest_account_info['com.garena.msdk.guest_password'].replace(/\s/g, '');
+                guest_account_info['com.garena.msdk.guest_password'].replace(/[\s\n\r]/g, '');
         }
         
-        if (!guest_account_info || !guest_account_info['com.garena.msdk.guest_uid'] || !guest_account_info['com.garena.msdk.guest_password']) {
-            return res.status(400).json({ error: 'Invalid format! Use: {"guest_account_info":{"com.garena.msdk.guest_password":"...","com.garena.msdk.guest_uid":"..."}}' });
-        }
+        const uid = guest_account_info?.['com.garena.msdk.guest_uid'];
+        const password = guest_account_info?.['com.garena.msdk.guest_password'];
         
-        const uid = guest_account_info['com.garena.msdk.guest_uid'];
-        const password = guest_account_info['com.garena.msdk.guest_password'];
+        if (!uid || !password) {
+            return res.status(400).json({ 
+                error: 'Missing required fields',
+                hint: 'Use format: {"guest_account_info": {"com.garena.msdk.guest_uid": "...", "com.garena.msdk.guest_password": "..."}}'
+            });
+        }
         
         console.log(`[JWT Tool] Generating token for UID: ${uid}`);
+        console.log(`[JWT Tool] Password length: ${password.length}`);
         
         const loginReq = {
             uid: uid,
@@ -147,7 +170,7 @@ app.post('/api/generate-jwt', async (req, res) => {
                 token: jsonRes.token,
                 uid: uid,
                 server_url: jsonRes.server_url,
-                lock_region: jsonRes.lock_region
+                lock_region: jsonRes.lock_region || 'Global'
             });
         } else {
             return res.status(500).json({ error: 'Token not found in response', response: jsonRes });
@@ -165,18 +188,26 @@ app.post('/api/generate-jwt', async (req, res) => {
 app.get('/api/internal/logs/sync', (req, res) => {
     const logsToSend = [...requestLogsBuffer];
     requestLogsBuffer = [];
+    // Store in permanent logs
+    allTimeLogs.unshift(...logsToSend);
+    if (allTimeLogs.length > 200) allTimeLogs = allTimeLogs.slice(0, 200);
     res.json(logsToSend);
+});
+
+app.get('/api/internal/all-logs', (req, res) => {
+    res.json(allTimeLogs);
 });
 
 app.post('/api/internal/clear', (req, res) => {
     requestLogsBuffer = [];
+    allTimeLogs = [];
     res.json({ success: true });
 });
 
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
 // ==========================================
-// 🎨 REDESIGNED DASHBOARD
+// 🎨 SPRING GREEN THEME DASHBOARD
 // ==========================================
 app.get('/romeo/ds', (req, res) => {
     res.send(`
@@ -185,100 +216,225 @@ app.get('/romeo/ds', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <title>👑 KING NEXUS V9 | Ultimate Hijacker</title>
+        <title>🌸 KING NEXUS V9 | Spring Edition</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
         <style>
             * { font-family: 'Inter', sans-serif; }
+            
             body { 
-                background: linear-gradient(135deg, #0a0a0f 0%, #0f0f1a 50%, #0a0a0f 100%);
+                background: linear-gradient(135deg, #0a2e1a 0%, #1a4a2a 25%, #0d2818 50%, #1a3a2a 75%, #0a2e1a 100%);
                 min-height: 100vh;
+                position: relative;
             }
-            .glow-text {
-                text-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+            
+            body::before {
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320"><path fill="rgba(34,197,94,0.05)" d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,154.7C960,171,1056,181,1152,165.3C1248,149,1344,107,1392,85.3L1440,64L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path></svg>') repeat-x bottom;
+                background-size: cover;
+                opacity: 0.3;
+                pointer-events: none;
             }
-            .card-glow {
-                background: rgba(15, 15, 26, 0.7);
+            
+            .glass-panel {
+                background: rgba(20, 40, 25, 0.75);
                 backdrop-filter: blur(12px);
-                border: 1px solid rgba(139, 92, 246, 0.15);
-                transition: all 0.3s ease;
+                border: 1px solid rgba(74, 222, 128, 0.2);
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                position: relative;
+                overflow: hidden;
             }
-            .card-glow:hover {
-                border-color: rgba(139, 92, 246, 0.4);
-                box-shadow: 0 0 25px rgba(139, 92, 246, 0.1);
+            
+            .glass-panel::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: -100%;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(90deg, transparent, rgba(74, 222, 128, 0.1), transparent);
+                transition: left 0.5s;
             }
-            .input-dark {
-                background: rgba(0, 0, 0, 0.6);
-                border: 1px solid rgba(139, 92, 246, 0.2);
-                transition: all 0.2s ease;
-                color: #e2e8f0;
+            
+            .glass-panel:hover::before {
+                left: 100%;
             }
-            .input-dark:focus {
-                border-color: #8b5cf6;
-                outline: none;
-                box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
-            }
-            .btn-primary {
-                background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
-                transition: all 0.2s ease;
-            }
-            .btn-primary:hover {
+            
+            .glass-panel:hover {
+                border-color: rgba(74, 222, 128, 0.6);
+                box-shadow: 0 0 30px rgba(74, 222, 128, 0.2);
                 transform: translateY(-2px);
-                box-shadow: 0 10px 25px -5px rgba(139, 92, 246, 0.4);
             }
-            .tab-active {
-                background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(99, 102, 241, 0.1) 100%);
-                border-bottom: 2px solid #8b5cf6;
-                color: #8b5cf6;
+            
+            .glow-text {
+                text-shadow: 0 0 20px rgba(74, 222, 128, 0.4);
             }
-            ::-webkit-scrollbar { width: 6px; height: 6px; }
-            ::-webkit-scrollbar-track { background: #0a0a0f; }
-            ::-webkit-scrollbar-thumb { background: #8b5cf6; border-radius: 10px; }
+            
+            .btn-spring {
+                background: linear-gradient(135deg, #22c55e 0%, #16a34a 50%, #15803d 100%);
+                transition: all 0.2s ease;
+                position: relative;
+                overflow: hidden;
+            }
+            
+            .btn-spring:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 10px 25px -5px rgba(34, 197, 94, 0.4);
+            }
+            
+            .btn-spring:active {
+                transform: translateY(0);
+            }
+            
+            .btn-outline-spring {
+                background: transparent;
+                border: 1px solid rgba(74, 222, 128, 0.4);
+                transition: all 0.2s ease;
+            }
+            
+            .btn-outline-spring:hover {
+                background: rgba(74, 222, 128, 0.1);
+                border-color: rgba(74, 222, 128, 0.8);
+                box-shadow: 0 0 15px rgba(74, 222, 128, 0.2);
+            }
+            
+            .input-spring {
+                background: rgba(0, 0, 0, 0.5);
+                border: 1px solid rgba(74, 222, 128, 0.2);
+                transition: all 0.2s ease;
+                color: #dcfce7;
+            }
+            
+            .input-spring:focus {
+                border-color: #22c55e;
+                outline: none;
+                box-shadow: 0 0 15px rgba(34, 197, 94, 0.3);
+                background: rgba(0, 0, 0, 0.7);
+            }
+            
+            .tab-spring {
+                transition: all 0.2s ease;
+                position: relative;
+            }
+            
+            .tab-active-spring {
+                background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(22, 163, 74, 0.1) 100%);
+                border-bottom: 2px solid #22c55e;
+                color: #22c55e;
+            }
+            
+            .tab-spring:hover:not(.tab-active-spring) {
+                background: rgba(34, 197, 94, 0.1);
+                transform: translateY(-1px);
+            }
+            
             .code-block {
-                background: #0a0a0f;
-                border: 1px solid #1a1a2e;
+                background: rgba(0, 0, 0, 0.6);
+                border: 1px solid rgba(74, 222, 128, 0.2);
                 border-radius: 12px;
                 padding: 16px;
                 font-family: 'Courier New', monospace;
                 font-size: 12px;
                 overflow-x: auto;
             }
-            @keyframes pulse {
-                0%, 100% { opacity: 1; }
-                50% { opacity: 0.5; }
+            
+            .log-entry {
+                transition: all 0.2s ease;
             }
-            .pulse-dot {
-                animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            
+            .log-entry:hover {
+                transform: translateX(4px);
+            }
+            
+            ::-webkit-scrollbar { width: 6px; height: 6px; }
+            ::-webkit-scrollbar-track { background: #0a2e1a; }
+            ::-webkit-scrollbar-thumb { background: #22c55e; border-radius: 10px; }
+            ::-webkit-scrollbar-thumb:hover { background: #16a34a; }
+            
+            @keyframes float {
+                0%, 100% { transform: translateY(0px); }
+                50% { transform: translateY(-5px); }
+            }
+            
+            .float-animation {
+                animation: float 3s ease-in-out infinite;
+            }
+            
+            @keyframes pulse-glow {
+                0%, 100% { box-shadow: 0 0 5px rgba(34, 197, 94, 0.3); }
+                50% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.6); }
+            }
+            
+            .pulse-glow {
+                animation: pulse-glow 2s ease-in-out infinite;
+            }
+            
+            .theme-toggle {
+                background: rgba(0, 0, 0, 0.3);
+                border-radius: 60px;
+                padding: 4px;
+                cursor: pointer;
+                transition: all 0.3s;
+            }
+            
+            .theme-option {
+                padding: 6px 12px;
+                border-radius: 50px;
+                transition: all 0.2s;
+                font-size: 12px;
+                font-weight: 600;
+            }
+            
+            .theme-option.active {
+                background: #22c55e;
+                color: white;
+                box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
             }
         </style>
     </head>
     <body class="p-4 md:p-8">
-        <div class="max-w-7xl mx-auto">
-            <!-- Header -->
-            <div class="card-glow rounded-2xl p-6 mb-6">
+        <div class="max-w-7xl mx-auto relative z-10">
+            <!-- Header with Theme Toggle -->
+            <div class="glass-panel rounded-2xl p-6 mb-6">
                 <div class="flex flex-col md:flex-row justify-between items-center gap-4">
                     <div class="flex items-center gap-4">
-                        <div class="w-12 h-12 bg-gradient-to-br from-purple-500 to-blue-500 rounded-xl flex items-center justify-center">
-                            <i class="fas fa-crown text-white text-2xl"></i>
+                        <div class="w-14 h-14 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center float-animation">
+                            <i class="fas fa-crown text-white text-3xl"></i>
                         </div>
                         <div>
-                            <h1 class="text-3xl md:text-4xl font-black glow-text" style="background: linear-gradient(135deg, #a855f7, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
+                            <h1 class="text-3xl md:text-5xl font-black glow-text" style="background: linear-gradient(135deg, #22c55e, #16a34a, #059669); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
                                 KING NEXUS V9
                             </h1>
                             <div class="flex items-center gap-2 mt-1">
-                                <div class="w-2 h-2 rounded-full bg-green-500 pulse-dot"></div>
-                                <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">💉 ACTIVE INJECTION MODE</p>
+                                <div class="w-2 h-2 rounded-full bg-green-400 pulse-glow"></div>
+                                <p class="text-xs text-green-400/80 font-semibold uppercase tracking-wider">🌸 SPRING EDITION | ACTIVE INJECTION MODE</p>
                             </div>
                         </div>
                     </div>
-                    <div class="flex gap-2">
-                        <div class="relative">
-                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-xs"></i>
-                            <input type="text" id="searchBox" oninput="fullRender()" placeholder="Search logs..." class="input-dark pl-8 pr-3 py-2 rounded-lg text-sm w-48 md:w-64">
+                    
+                    <div class="flex gap-3 items-center">
+                        <!-- Theme Toggle -->
+                        <div class="theme-toggle flex gap-1">
+                            <div class="theme-option active" data-theme="spring" onclick="switchTheme('spring')">
+                                <i class="fas fa-seedling"></i> Spring
+                            </div>
+                            <div class="theme-option" data-theme="summer" onclick="switchTheme('summer')">
+                                <i class="fas fa-sun"></i> Summer
+                            </div>
                         </div>
-                        <button onclick="nukeEverything()" class="bg-red-950/50 hover:bg-red-900/50 text-red-400 px-4 py-2 rounded-lg transition-all text-sm font-semibold border border-red-500/30">
+                        
+                        <div class="relative">
+                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-green-500/50 text-xs"></i>
+                            <input type="text" id="searchBox" oninput="filterLogs()" placeholder="Search logs..." class="input-spring pl-8 pr-3 py-2 rounded-lg text-sm w-48 md:w-64">
+                        </div>
+                        <button onclick="nukeEverything()" class="bg-red-950/40 hover:bg-red-900/50 text-red-400 px-4 py-2 rounded-lg transition-all text-sm font-semibold border border-red-500/30 hover:shadow-lg hover:shadow-red-500/20">
                             <i class="fas fa-trash-alt mr-2"></i>CLEAR
                         </button>
                     </div>
@@ -286,80 +442,81 @@ app.get('/romeo/ds', (req, res) => {
             </div>
             
             <!-- Tabs -->
-            <div class="flex gap-1 mb-6 bg-black/30 rounded-xl p-1">
-                <button onclick="showTab('logs')" id="tab-logs-btn" class="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 tab-active">
+            <div class="flex gap-2 mb-6 bg-black/20 rounded-xl p-1 backdrop-blur-sm">
+                <button onclick="showTab('logs')" id="tab-logs-btn" class="tab-spring flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 tab-active-spring">
                     <i class="fas fa-tachometer-alt"></i> LIVE LOGS
                 </button>
-                <button onclick="showTab('jwt')" id="tab-jwt-btn" class="flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 text-gray-400 hover:text-purple-400">
+                <button onclick="showTab('jwt')" id="tab-jwt-btn" class="tab-spring flex-1 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-2 text-green-400/60 hover:text-green-400">
                     <i class="fas fa-key"></i> JWT GENERATOR
                 </button>
             </div>
             
             <!-- Logs Container -->
-            <div id="logs-container" class="space-y-4"></div>
+            <div id="logs-container" class="space-y-3 max-h-[600px] overflow-y-auto pr-2"></div>
             
-            <!-- JWT Tool Container -->
+            <!-- JWT Tool Container with Logs Below -->
             <div id="jwt-container" class="hidden">
-                <div class="card-glow rounded-2xl p-6">
+                <!-- JWT Generator Panel -->
+                <div class="glass-panel rounded-2xl p-6 mb-6">
                     <div class="flex items-center gap-3 mb-6">
-                        <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                            <i class="fas fa-key text-white"></i>
+                        <div class="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center">
+                            <i class="fas fa-key text-white text-xl"></i>
                         </div>
                         <div>
-                            <h2 class="text-xl font-bold text-white">JWT Token Generator</h2>
-                            <p class="text-xs text-gray-400">Generate JWT token from guest account credentials</p>
+                            <h2 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-400">JWT Token Generator</h2>
+                            <p class="text-xs text-green-400/70">Generate JWT token from guest account credentials</p>
                         </div>
                     </div>
                     
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-xs font-semibold text-gray-400 mb-2">
+                            <label class="block text-xs font-semibold text-green-400/80 mb-2">
                                 <i class="fas fa-code mr-1"></i> Paste Guest Account JSON
                             </label>
-                            <textarea id="jsonInput" rows="8" class="w-full input-dark rounded-xl p-4 text-sm font-mono" placeholder='{
-  "guest_account_info": {
-    "com.garena.msdk.guest_password": "344D0EC1ACC234C7D283B0A11954147F18A4AD38F3F3F8C4B7E53AB43D19FD2A",
-    "com.garena.msdk.guest_uid": "4627647913"
-  }
-}'></textarea>
-                            <p class="text-xs text-gray-500 mt-2">
+                            <textarea id="jsonInput" rows="6" class="w-full input-spring rounded-xl p-4 text-sm font-mono" placeholder='{"guest_account_info":{"com.garena.msdk.guest_password":"344D0EC1ACC234C7D283B0A11954147F18A4AD38F3F3F8C4B7E53AB43D19FD2A","com.garena.msdk.guest_uid":"4627647913"}}'></textarea>
+                            <p class="text-xs text-green-500/50 mt-2">
                                 <i class="fas fa-info-circle"></i> Spaces and line breaks are automatically handled
                             </p>
                         </div>
                         
-                        <div class="flex gap-3">
-                            <button onclick="generateJWT()" class="btn-primary px-6 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2">
+                        <div class="flex gap-3 flex-wrap">
+                            <button onclick="generateJWT()" class="btn-spring px-6 py-2.5 rounded-lg font-bold text-sm flex items-center gap-2">
                                 <i class="fas fa-magic"></i> Generate Token
                             </button>
-                            <button onclick="clearJWT()" class="bg-gray-800 hover:bg-gray-700 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2">
+                            <button onclick="clearJWT()" class="btn-outline-spring px-5 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2">
                                 <i class="fas fa-eraser"></i> Clear
                             </button>
-                            <button onclick="loadExample()" class="border border-purple-500/30 hover:bg-purple-500/10 px-5 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2">
-                                <i class="fas fa-file-alt"></i> Example
+                            <button onclick="loadExample()" class="btn-outline-spring px-5 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2">
+                                <i class="fas fa-file-alt"></i> Load Example
                             </button>
                         </div>
                         
+                        <!-- Result Area -->
                         <div id="jwtResult" class="hidden mt-6">
-                            <div class="bg-gradient-to-br from-purple-900/20 to-blue-900/20 rounded-xl p-5 border border-purple-500/30">
-                                <div class="flex items-center justify-between mb-3">
+                            <div class="bg-gradient-to-br from-green-900/30 to-emerald-900/30 rounded-xl p-5 border border-green-500/30">
+                                <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
                                     <p class="text-green-400 text-sm font-bold flex items-center gap-2">
                                         <i class="fas fa-check-circle"></i> TOKEN GENERATED SUCCESSFULLY
                                     </p>
-                                    <button onclick="copyToken()" class="text-gray-400 hover:text-white text-sm transition-all">
-                                        <i class="fas fa-copy"></i> Copy
+                                    <button onclick="copyToken()" class="text-green-400/70 hover:text-green-400 text-sm transition-all">
+                                        <i class="fas fa-copy"></i> Copy Token
                                     </button>
                                 </div>
                                 <div class="code-block">
-                                    <code id="tokenOutput" class="text-purple-300 break-all text-xs"></code>
+                                    <code id="tokenOutput" class="text-green-300 break-all text-xs"></code>
                                 </div>
-                                <div class="grid grid-cols-2 gap-3 mt-4 text-xs">
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-xs">
                                     <div class="bg-black/30 rounded-lg p-2">
-                                        <span class="text-gray-500">UID:</span>
-                                        <span id="resultUid" class="text-purple-300 ml-2 font-mono"></span>
+                                        <span class="text-green-500/70">UID:</span>
+                                        <span id="resultUid" class="text-green-300 ml-2 font-mono"></span>
                                     </div>
                                     <div class="bg-black/30 rounded-lg p-2">
-                                        <span class="text-gray-500">Region:</span>
-                                        <span id="resultRegion" class="text-purple-300 ml-2 font-mono"></span>
+                                        <span class="text-green-500/70">Region:</span>
+                                        <span id="resultRegion" class="text-green-300 ml-2 font-mono"></span>
+                                    </div>
+                                    <div class="bg-black/30 rounded-lg p-2">
+                                        <span class="text-green-500/70">Server:</span>
+                                        <span id="resultServer" class="text-green-300 ml-2 font-mono text-xs truncate"></span>
                                     </div>
                                 </div>
                             </div>
@@ -374,13 +531,78 @@ app.get('/romeo/ds', (req, res) => {
                         </div>
                     </div>
                 </div>
+                
+                <!-- ALL LOGS Section Below JWT Generator -->
+                <div class="glass-panel rounded-2xl p-6">
+                    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-history text-green-400 text-xl"></i>
+                            <h3 class="text-lg font-bold text-white">📋 All Captured Logs</h3>
+                            <span id="logCount" class="text-xs bg-green-500/20 px-2 py-1 rounded-full text-green-400">0</span>
+                        </div>
+                        <button onclick="refreshAllLogs()" class="btn-outline-spring px-3 py-1 rounded-lg text-xs">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                    </div>
+                    <div id="allLogsList" class="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+                        <div class="text-center text-green-500/50 py-8">
+                            <i class="fas fa-inbox text-3xl mb-2"></i>
+                            <p>No logs captured yet. Proxy activity will appear here.</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
+
+        <style id="theme-styles">
+            /* Summer theme styles */
+            .theme-summer body {
+                background: linear-gradient(135deg, #3b2a1a 0%, #5a3a2a 25%, #2a1a0a 50%, #4a2a1a 75%, #3b2a1a 100%);
+            }
+            .theme-summer .glass-panel {
+                background: rgba(60, 40, 25, 0.75);
+                border-color: rgba(251, 146, 60, 0.2);
+            }
+            .theme-summer .glass-panel:hover {
+                border-color: rgba(251, 146, 60, 0.6);
+                box-shadow: 0 0 30px rgba(251, 146, 60, 0.2);
+            }
+            .theme-summer .glow-text {
+                text-shadow: 0 0 20px rgba(251, 146, 60, 0.4);
+            }
+            .theme-summer .btn-spring {
+                background: linear-gradient(135deg, #fb923c 0%, #ea580c 50%, #c2410c 100%);
+            }
+            .theme-summer .tab-active-spring {
+                background: linear-gradient(135deg, rgba(251, 146, 60, 0.2) 0%, rgba(234, 88, 12, 0.1) 100%);
+                border-bottom-color: #fb923c;
+                color: #fb923c;
+            }
+        </style>
 
         <script>
             const db = new Dexie("NexusV9DB");
             db.version(1).stores({ logs: 'id, timestamp, method, targetHost, path, status, duration' });
-
+            
+            let currentTheme = 'spring';
+            
+            function switchTheme(theme) {
+                currentTheme = theme;
+                document.body.classList.remove('theme-spring', 'theme-summer');
+                if (theme === 'summer') {
+                    document.body.classList.add('theme-summer');
+                } else {
+                    document.body.classList.add('theme-spring');
+                }
+                
+                document.querySelectorAll('.theme-option').forEach(opt => {
+                    opt.classList.remove('active');
+                    if (opt.getAttribute('data-theme') === theme) {
+                        opt.classList.add('active');
+                    }
+                });
+            }
+            
             async function syncServerData() {
                 try {
                     const res = await fetch('/api/internal/logs/sync');
@@ -390,18 +612,56 @@ app.get('/romeo/ds', (req, res) => {
                         if(document.getElementById('searchBox').value.trim() === "") appendNewLogs(newLogs); 
                         else fullRender(); 
                     }
+                    refreshAllLogs();
                 } catch(e) {}
             }
-
+            
+            async function refreshAllLogs() {
+                try {
+                    const res = await fetch('/api/internal/all-logs');
+                    const logs = await res.json();
+                    document.getElementById('logCount').innerText = logs.length;
+                    const container = document.getElementById('allLogsList');
+                    if (logs.length === 0) {
+                        container.innerHTML = '<div class="text-center text-green-500/50 py-8"><i class="fas fa-inbox text-3xl mb-2"></i><p>No logs captured yet. Proxy activity will appear here.</p></div>';
+                        return;
+                    }
+                    container.innerHTML = logs.slice(0, 100).map(log => generateCompactLogHTML(log)).join('');
+                } catch(e) {}
+            }
+            
+            function generateCompactLogHTML(log) {
+                let isError = log.status >= 400;
+                let statusColor = isError ? 'text-red-400' : 'text-green-400';
+                let statusBg = isError ? 'bg-red-950/30' : 'bg-green-950/30';
+                return \`
+                    <div class="log-entry bg-black/20 rounded-lg p-3 border border-green-500/10 hover:border-green-500/30 transition-all">
+                        <div class="flex justify-between items-start gap-2 flex-wrap">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="bg-green-900/40 text-green-300 px-2 py-0.5 rounded text-xs font-mono">\${log.method}</span>
+                                <span class="text-blue-300 text-xs font-mono break-all">[\${log.targetHost}] \${log.path}</span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-gray-500 text-xs">\${log.timestamp}</span>
+                                <span class="\${statusColor} \${statusBg} px-2 py-0.5 rounded text-xs font-bold">\${log.status}</span>
+                            </div>
+                        </div>
+                        <div class="mt-2 text-xs text-gray-400 truncate">
+                            <i class="fas fa-arrow-up mr-1"></i>\${(log.req || 'EMPTY').substring(0, 100)}...
+                        </div>
+                    </div>
+                \`;
+            }
+            
             function generateLogHTML(log) {
                 let isError = log.status >= 400;
                 let statusColor = isError ? 'text-red-400 bg-red-900/30' : 'text-green-400 bg-green-900/30';
                 let statusIcon = isError ? 'fa-times-circle' : 'fa-check-circle';
                 return \`
-                <div class="card-glow rounded-xl p-4 transition-all">
-                    <div class="flex flex-wrap justify-between items-center mb-3 pb-2 border-b border-gray-800 gap-2">
+                <div class="glass-panel rounded-xl p-4 log-entry">
+                    <div class="flex flex-wrap justify-between items-center mb-3 pb-2 border-b border-green-500/20 gap-2">
                         <div class="flex items-center gap-2 flex-wrap">
-                            <span class="bg-purple-900/40 text-purple-300 px-2 py-1 rounded text-xs font-bold">\${log.method}</span>
+                            <span class="bg-green-900/40 text-green-300 px-2 py-1 rounded text-xs font-bold">\${log.method}</span>
                             <span class="text-blue-300 text-xs font-mono">[\${log.targetHost}] \${log.path}</span>
                         </div>
                         <div class="flex items-center gap-3">
@@ -413,13 +673,13 @@ app.get('/romeo/ds', (req, res) => {
                     </div>
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <div>
-                            <div class="text-gray-500 text-xs mb-2 font-semibold flex items-center gap-1">
+                            <div class="text-green-500/70 text-xs mb-2 font-semibold flex items-center gap-1">
                                 <i class="fas fa-arrow-up"></i> REQUEST
                             </div>
-                            <pre class="bg-black/50 rounded-lg p-3 text-xs text-purple-300/80 overflow-x-auto max-h-48">\${log.req || '[EMPTY]'}</pre>
+                            <pre class="bg-black/50 rounded-lg p-3 text-xs text-green-300/80 overflow-x-auto max-h-48">\${log.req || '[EMPTY]'}</pre>
                         </div>
                         <div>
-                            <div class="text-gray-500 text-xs mb-2 font-semibold flex items-center gap-1">
+                            <div class="text-green-500/70 text-xs mb-2 font-semibold flex items-center gap-1">
                                 <i class="fas fa-arrow-down"></i> RESPONSE
                             </div>
                             <pre class="bg-black/50 rounded-lg p-3 text-xs \${isError ? 'text-red-300/80' : 'text-emerald-300/80'} overflow-x-auto max-h-48">\${log.res || '[EMPTY]'}</pre>
@@ -430,19 +690,25 @@ app.get('/romeo/ds', (req, res) => {
 
             function appendNewLogs(newLogs) {
                 document.getElementById('logs-container').insertAdjacentHTML('afterbegin', newLogs.map(generateLogHTML).join(''));
+                refreshAllLogs();
             }
             
             async function fullRender() {
                 const term = document.getElementById('searchBox').value.toLowerCase();
                 let logs = await db.logs.orderBy('id').reverse().toArray();
                 if(term) logs = logs.filter(l => l.path.toLowerCase().includes(term) || String(l.status).includes(term) || l.targetHost.toLowerCase().includes(term));
-                document.getElementById('logs-container').innerHTML = logs.length ? logs.map(generateLogHTML).join('') : '<div class="text-center text-gray-500 py-12"><i class="fas fa-inbox text-4xl mb-2"></i><p>No logs found</p></div>';
+                document.getElementById('logs-container').innerHTML = logs.length ? logs.map(generateLogHTML).join('') : '<div class="text-center text-green-500/50 py-12"><i class="fas fa-inbox text-4xl mb-2"></i><p>No logs found</p></div>';
+            }
+            
+            function filterLogs() {
+                fullRender();
             }
             
             async function nukeEverything() {
                 await fetch('/api/internal/clear', { method: 'POST' });
                 await db.logs.clear();
                 fullRender();
+                refreshAllLogs();
             }
             
             function showTab(tab) {
@@ -454,28 +720,24 @@ app.get('/romeo/ds', (req, res) => {
                 if(tab === 'logs') {
                     logsContainer.classList.remove('hidden');
                     jwtContainer.classList.add('hidden');
-                    logsBtn.classList.add('tab-active');
-                    logsBtn.classList.remove('text-gray-400');
-                    jwtBtn.classList.remove('tab-active');
-                    jwtBtn.classList.add('text-gray-400');
+                    logsBtn.classList.add('tab-active-spring');
+                    logsBtn.classList.remove('text-green-400/60');
+                    jwtBtn.classList.remove('tab-active-spring');
+                    jwtBtn.classList.add('text-green-400/60');
                     fullRender();
                 } else {
                     logsContainer.classList.add('hidden');
                     jwtContainer.classList.remove('hidden');
-                    jwtBtn.classList.add('tab-active');
-                    jwtBtn.classList.remove('text-gray-400');
-                    logsBtn.classList.remove('tab-active');
-                    logsBtn.classList.add('text-gray-400');
+                    jwtBtn.classList.add('tab-active-spring');
+                    jwtBtn.classList.remove('text-green-400/60');
+                    logsBtn.classList.remove('tab-active-spring');
+                    logsBtn.classList.add('text-green-400/60');
+                    refreshAllLogs();
                 }
             }
             
             function loadExample() {
-                document.getElementById('jsonInput').value = JSON.stringify({
-                    guest_account_info: {
-                        "com.garena.msdk.guest_password": "344D0EC1ACC234C7D283B0A11954147F18A4AD38F3F3F8C4B7E53AB43D19FD2A",
-                        "com.garena.msdk.guest_uid": "4627647913"
-                    }
-                }, null, 2);
+                document.getElementById('jsonInput').value = '{"guest_account_info":{"com.garena.msdk.guest_password":"344D0EC1ACC234C7D283B0A11954147F18A4AD38F3F3F8C4B7E53AB43D19FD2A","com.garena.msdk.guest_uid":"4627647913"}}';
             }
             
             async function generateJWT() {
@@ -491,16 +753,11 @@ app.get('/romeo/ds', (req, res) => {
                     // Auto-clean spaces from password
                     if (parsed.guest_account_info && parsed.guest_account_info['com.garena.msdk.guest_password']) {
                         parsed.guest_account_info['com.garena.msdk.guest_password'] = 
-                            parsed.guest_account_info['com.garena.msdk.guest_password'].replace(/\\s/g, '');
+                            parsed.guest_account_info['com.garena.msdk.guest_password'].replace(/[\\s\\n\\r]/g, '');
                     }
                     
                     if(!parsed.guest_account_info || !parsed.guest_account_info['com.garena.msdk.guest_uid'] || !parsed.guest_account_info['com.garena.msdk.guest_password']) {
                         showError("Invalid format! Required: guest_account_info with com.garena.msdk.guest_uid and com.garena.msdk.guest_password");
-                        return;
-                    }
-                    
-                    if(parsed.guest_account_info['com.garena.msdk.guest_password'].length < 50) {
-                        showError("Password seems too short or invalid format!");
                         return;
                     }
                     
@@ -518,7 +775,8 @@ app.get('/romeo/ds', (req, res) => {
                     if(data.success) {
                         document.getElementById('tokenOutput').innerText = data.token;
                         document.getElementById('resultUid').innerText = data.uid;
-                        document.getElementById('resultRegion').innerText = data.lock_region || 'N/A';
+                        document.getElementById('resultRegion').innerText = data.lock_region || 'Global';
+                        document.getElementById('resultServer').innerText = data.server_url || 'N/A';
                         document.getElementById('jwtResult').classList.remove('hidden');
                     } else {
                         showError(data.error || "Something went wrong!");
@@ -583,7 +841,7 @@ app.all('*', async (req, res) => {
             "is_review_server": false, "use_login_optional_download": true,
             "use_background_download": true, "use_background_download_lobby": true,
             "country_code": "SG", "client_ip": "15.235.211.216", "gdpr_version": 0,
-            "billboard_msg": "👑 KING AURORA V9: HIJACKER",
+            "billboard_msg": "🌸 KING NEXUS V9: SPRING HIJACKER",
             "core_url": "csoversea.castle.freefiremobile.com",
             "core_ip_list": ["0.0.0.0", "50.109.27.134", "129.226.2.163"],
             "appstore_url": "http://play.google.com/store/apps/details?id=com.dts.freefireth",
@@ -680,16 +938,20 @@ async function processAndLog(method, targetHost, originalUrl, query, reqBuffer, 
         }
     }
 
-    requestLogsBuffer.push({
+    const logEntry = {
         id: Date.now() + '-' + Math.floor(Math.random()*10000),
         timestamp: new Date().toLocaleTimeString(),
         method, targetHost, path: originalUrl, status,
         duration: `${Date.now() - startTime}ms`,
         req: parsedReqLog, res: parsedResLog
-    });
+    };
+    
+    requestLogsBuffer.push(logEntry);
+    allTimeLogs.unshift(logEntry);
+    if (allTimeLogs.length > 200) allTimeLogs = allTimeLogs.slice(0, 200);
 }
 
 app.listen(process.env.PORT || 3000, () => {
-    console.log('🚀 KING NEXUS V9 Running on port 3000');
+    console.log('🌸 KING NEXUS V9 - Spring Edition Running on port 3000');
     console.log('📊 Dashboard: http://localhost:3000/romeo/ds');
 });
